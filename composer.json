@@ -1,0 +1,49 @@
+{
+    "name": "galase/laravel-flow-docs",
+    "description": "Static flow documentation generator for Laravel applications.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "documentation",
+        "static-analysis",
+        "flow-docs"
+    ],
+    "require": {
+        "php": "^8.1",
+        "illuminate/console": "^9.0|^10.0|^11.0|^12.0",
+        "illuminate/routing": "^9.0|^10.0|^11.0|^12.0",
+        "illuminate/support": "^9.0|^10.0|^11.0|^12.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^7.0|^8.0|^9.0|^10.0",
+        "phpunit/phpunit": "^9.6|^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Galase\\FlowDocs\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Galase\\FlowDocs\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Galase\\FlowDocs\\FlowDocsServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "check": [
+            "@php -l src/FlowDocsServiceProvider.php",
+            "@php -l src/Console/GenerateFlowDocsCommand.php",
+            "@php -l src/FlowDocsGenerator.php"
+        ]
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
