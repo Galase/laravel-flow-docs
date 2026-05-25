@@ -5,6 +5,10 @@ return [
 
     'app_dir' => app_path(),
 
+    'migration_dirs' => [
+        database_path('migrations'),
+    ],
+
     'project_name' => config('app.name', 'Laravel'),
 
     'back_link' => null,

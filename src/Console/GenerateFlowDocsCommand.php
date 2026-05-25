@@ -57,6 +57,8 @@ class GenerateFlowDocsCommand extends Command
             [
                 ['Services', $result['services']],
                 ['Controllers', $result['controllers']],
+                ['Models', $result['models']],
+                ['Tables', $result['tables']],
                 ['Methods', $result['methods']],
                 ['Files written', $result['files']],
                 ['Output', $result['output']],

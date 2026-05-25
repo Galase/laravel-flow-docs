@@ -2,7 +2,7 @@
 
 Static HTML flow documentation for Laravel applications.
 
-The package analyzes PHP source code without executing business rules. It maps controllers, services/actions/use cases, methods, route bindings, inferred models, internal calls, and line-level flow notes into presentation-friendly HTML.
+The package analyzes PHP source code without executing business rules. It maps controllers, services/actions/use cases, models, migrations, foreign keys, inferred joins, dependency injection, route bindings, internal calls, and line-level flow notes into presentation-friendly HTML.
 
 ## Installation
 
@@ -17,6 +17,14 @@ Open:
 ```text
 public/docs/flow/index.html
 ```
+
+Database diagram:
+
+```text
+public/docs/flow/database/diagram.html
+```
+
+The generated pages include a top navigation bar and index sections. The database diagram supports zoom controls, reset, Ctrl + scroll zoom, and drag-to-pan navigation.
 
 ## Command
 
@@ -42,6 +50,7 @@ Published config:
 return [
     'output_path' => public_path('docs/flow'),
     'app_dir' => app_path(),
+    'migration_dirs' => [database_path('migrations')],
     'project_name' => config('app.name', 'Laravel'),
     'controller_namespaces' => ['App\\Http\\Controllers'],
     'service_namespaces' => ['App\\Services', 'App\\Http\\Services', 'App\\Actions', 'App\\Domain'],
@@ -52,7 +61,17 @@ return [
 
 ## Static Analysis
 
-The analyzer detects models from direct queries, typed returns, direct returns, and internal method returns:
+The analyzer detects:
+
+- controllers by configured namespace, `*Controller` suffix, and `Controllers/` folders, including modular monolith paths;
+- services by configured namespace, service/action/use-case suffixes, and `Services/`, `Actions/`, `UseCases/`, `Domain/`, or `Application/` folders;
+- dependency injection in constructors and typed method parameters, including promoted properties such as `protected Algo $algo`;
+- models from configured namespaces, `Models/` folders, Eloquent inheritance, direct queries, typed returns, direct returns, and internal method returns;
+- database tables, columns and foreign keys from migrations;
+- Eloquent relations declared in models;
+- joins used in code through query builder chains.
+
+Example model inference:
 
 ```php
 private function aluno($id)
