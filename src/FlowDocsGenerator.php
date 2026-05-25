@@ -245,9 +245,8 @@ class FlowDocsGenerator
         $index = $this->pageStart($title, 1) . '<main class="mx-auto max-w-7xl px-6 py-8">';
         $index .= $this->optionalBackLink($config);
         $index .= '<header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">' . $this->h($title) . '</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Documentacao estatica gerada a partir dos arquivos PHP. Inclui metodos, chamadas, models detectadas, variaveis inferidas por retorno de metodos internos e leitura objetiva do que cada fluxo faz.</p></header>';
-        $index .= $this->metricCards([ucfirst($kind) => count($classes), 'Metodos' => $totalMethods, 'Publicos' => $totalPublic, 'Pasta' => $kind . '/' . $kind]);
         $index .= '<section class="mt-8"><h2 class="text-lg font-semibold">Indice</h2><ul class="mt-3 grid gap-2 lg:grid-cols-2">' . ($indexItems ?: '<li class="rounded border bg-white px-3 py-2 text-sm text-slate-500">Nenhum item detectado.</li>') . '</ul></section>';
-        $index .= '<section class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">' . $cards . '</section></main></body></html>';
+        $index .= '</main></body></html>';
         file_put_contents($base . '/index.html', $index);
         $files++;
 
@@ -336,9 +335,8 @@ class FlowDocsGenerator
         $index = $this->pageStart('Documentacao por Model', 1) . '<main class="mx-auto max-w-7xl px-6 py-8">';
         $index .= $this->optionalBackLink($config);
         $index .= '<header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Documentacao por Model</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Models detectadas por namespace, pasta, heranca ou padrao de Eloquent. Inclui tabela inferida, relations declaradas, usos no codigo e schema vindo das migrations.</p></header>';
-        $index .= $this->metricCards(['Models' => count($models), 'Tabelas em migrations' => count($migrations['tables']), 'Relations' => array_sum(array_map(fn ($model) => count($this->modelRelations($model, $config)), $models)), 'Joins inferidos' => count($joins)]);
         $index .= '<section class="mt-8"><h2 class="text-lg font-semibold">Indice</h2><ul class="mt-3 grid gap-2 lg:grid-cols-2">' . ($indexItems ?: '<li class="rounded border bg-white px-3 py-2 text-sm text-slate-500">Nenhuma model detectada.</li>') . '</ul></section>';
-        $index .= '<section class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">' . $cards . '</section></main></body></html>';
+        $index .= '</main></body></html>';
         file_put_contents($base . '/index.html', $index);
         $files++;
 
@@ -389,38 +387,89 @@ class FlowDocsGenerator
     private function generateDatabaseDocs(array $migrations, array $models, array $joins, array $config, string $output): int
     {
         $base = $output . '/database';
+        $items = $base . '/tables';
         $this->ensureDirectory($base);
+        $this->ensureDirectory($items);
         $modelTables = [];
         foreach ($models as $model) {
             $modelTables[$this->modelTableName($model)][] = $model['fqcn'];
         }
 
+        $files = 0;
         $cards = '';
         $indexItems = '<li><a class="flex items-center justify-between gap-4 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm hover:border-blue-400" href="diagram.html"><span class="font-medium text-blue-900">Diagrama do banco</span><span class="text-xs text-blue-700">visual</span></a></li>';
         foreach ($migrations['tables'] as $table => $schema) {
             $relatedModels = $modelTables[$table] ?? [];
+            $tableFile = 'tables/' . $this->tableFileName($table);
+            $indexItems .= '<li><a class="flex items-center justify-between gap-4 rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-blue-400" href="' . $this->h($tableFile) . '"><span class="break-all font-medium text-slate-900">' . $this->h($table) . '</span><span class="shrink-0 text-xs text-slate-500">' . count($schema['columns']) . ' colunas</span></a></li>';
             $anchor = 'table-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', $table);
-            $indexItems .= '<li><a class="flex items-center justify-between gap-4 rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-blue-400" href="#' . $this->h($anchor) . '"><span class="break-all font-medium text-slate-900">' . $this->h($table) . '</span><span class="shrink-0 text-xs text-slate-500">' . count($schema['columns']) . ' colunas</span></a></li>';
             $cards .= '<section id="' . $this->h($anchor) . '" class="scroll-mt-24 rounded-lg border bg-white p-5"><div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><h2 class="break-words text-xl font-semibold">' . $this->h($table) . '</h2><span class="text-xs text-slate-500">' . count($schema['migrations']) . ' migrations</span></div>';
             $cards .= '<div class="mt-3 flex flex-wrap gap-2 text-xs"><span class="rounded bg-blue-50 px-2 py-1 text-blue-700">' . count($schema['columns']) . ' colunas</span><span class="rounded bg-rose-50 px-2 py-1 text-rose-700">' . count($schema['foreign_keys']) . ' FKs</span><span class="rounded bg-emerald-50 px-2 py-1 text-emerald-700">' . count($relatedModels) . ' models</span></div>';
             $cards .= '<p class="mt-3 text-sm text-slate-600">Models: ' . $this->h($relatedModels ? implode(', ', $relatedModels) : 'nenhuma model direta inferida') . '</p>';
             if ($schema['foreign_keys']) {
                 $cards .= '<ul class="mt-3 space-y-1 text-sm text-slate-700">' . implode('', array_map(fn ($fk) => '<li><code>' . $this->h($fk['column']) . '</code> referencia <code>' . $this->h($fk['references_table'] . '.' . $fk['references_column']) . '</code></li>', $schema['foreign_keys'])) . '</ul>';
             }
+            $cards .= '<a class="mt-4 inline-flex rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700" href="' . $this->h($tableFile) . '">Abrir tabela</a>';
             $cards .= '</section>';
+            file_put_contents($items . '/' . $this->tableFileName($table), $this->renderDatabaseTablePage($table, $schema, $migrations, $models, $joins, $config));
+            $files++;
         }
 
         $html = $this->pageStart('Documentacao do Banco', 1) . '<main class="mx-auto max-w-7xl px-6 py-8">';
         $html .= $this->optionalBackLink($config);
         $html .= '<header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Documentacao do Banco</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Schema inferido a partir das migrations, foreign keys declaradas e joins encontrados nos metodos da aplicacao.</p></header>';
-        $html .= $this->metricCards(['Tabelas' => count($migrations['tables']), 'Colunas' => array_sum(array_map(fn ($t) => count($t['columns']), $migrations['tables'])), 'FKs' => array_sum(array_map(fn ($t) => count($t['foreign_keys']), $migrations['tables'])), 'Joins inferidos' => count($joins)]);
-        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h2 class="text-lg font-semibold">Diagrama do banco</h2><p class="mt-1 text-sm text-slate-600">Mapa visual gerado a partir das tabelas e foreign keys detectadas nas migrations.</p></div><a class="inline-flex w-fit rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" href="diagram.html">Abrir diagrama</a></div></section>';
         $html .= '<section class="mt-8"><h2 class="text-lg font-semibold">Indice</h2><ul class="mt-3 grid gap-2 lg:grid-cols-2">' . $indexItems . '</ul></section>';
-        $html .= '<section class="mt-8 grid gap-4 lg:grid-cols-2">' . ($cards ?: '<p class="text-sm text-slate-500">Nenhuma migration encontrada.</p>') . '</section></main></body></html>';
+        $html .= '</main></body></html>';
         file_put_contents($base . '/index.html', $html);
         file_put_contents($base . '/diagram.html', $this->renderDatabaseDiagramPage($migrations, $models, $config));
 
-        return 2;
+        return $files + 2;
+    }
+
+    private function renderDatabaseTablePage(string $table, array $schema, array $migrations, array $models, array $joins, array $config): string
+    {
+        $relatedModels = array_values(array_filter($models, fn ($model) => $this->modelTableName($model) === $table));
+        $incoming = $this->incomingForeignKeys($table, $migrations);
+        $tableJoins = array_values(array_filter($joins, fn ($join) => in_array($table, [$join['base_table'], $join['join_table']], true)));
+
+        $columnsRows = '';
+        foreach ($schema['columns'] as $column) {
+            $columnsRows .= '<tr><td class="border-t px-3 py-2"><code>' . $this->h($column['name']) . '</code></td><td class="border-t px-3 py-2">' . $this->h($column['type']) . '</td><td class="border-t px-3 py-2 text-slate-500">' . $this->h($column['source']) . '</td></tr>';
+        }
+
+        $fkRows = '';
+        foreach ($schema['foreign_keys'] as $fk) {
+            $fkRows .= '<tr><td class="border-t px-3 py-2"><code>' . $this->h($fk['column']) . '</code></td><td class="border-t px-3 py-2"><code>' . $this->h($fk['references_table'] . '.' . $fk['references_column']) . '</code></td><td class="border-t px-3 py-2 text-slate-500">' . $this->h($fk['source']) . '</td></tr>';
+        }
+
+        $incomingRows = '';
+        foreach ($incoming as $fk) {
+            $incomingRows .= '<tr><td class="border-t px-3 py-2"><code>' . $this->h($fk['table'] . '.' . $fk['column']) . '</code></td><td class="border-t px-3 py-2"><code>' . $this->h($table . '.' . $fk['references_column']) . '</code></td><td class="border-t px-3 py-2 text-slate-500">' . $this->h($fk['source']) . '</td></tr>';
+        }
+
+        $modelItems = '';
+        foreach ($relatedModels as $model) {
+            $relations = $this->modelRelations($model, $config);
+            $modelItems .= '<li class="rounded border border-slate-200 bg-white p-3"><p class="break-all text-sm font-semibold text-slate-900">' . $this->h($model['fqcn']) . '</p><p class="mt-1 text-xs text-slate-500">' . $this->h($model['path']) . '</p><p class="mt-2 text-xs text-slate-600">' . count($relations) . ' relations declaradas</p></li>';
+        }
+
+        $joinItems = '';
+        foreach ($tableJoins as $join) {
+            $joinItems .= '<li><code>' . $this->h($join['base_table'] . ' join ' . $join['join_table']) . '</code><span class="ml-2 text-slate-500">' . $this->h($join['condition'] . ' em ' . $join['class'] . '@' . $join['method']) . '</span></li>';
+        }
+
+        $migrationItems = '<ul class="mt-2 grid gap-1 text-xs text-slate-600 md:grid-cols-2">' . implode('', array_map(fn ($file) => '<li><code>' . $this->h($file) . '</code></li>', $schema['migrations'])) . '</ul>';
+
+        $html = $this->pageStart('Tabela ' . $table, 2) . '<main class="mx-auto max-w-7xl px-6 py-8"><a href="../index.html" class="text-sm font-semibold text-blue-700">Voltar ao banco</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">Tabela do banco</p><h1 class="mt-2 break-words text-3xl font-semibold">' . $this->h($table) . '</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Descricao estatica completa da tabela com base nas migrations, foreign keys, models associadas e joins inferidos no codigo.</p></header>';
+        $html .= $this->metricCards(['Colunas' => count($schema['columns']), 'FKs de saida' => count($schema['foreign_keys']), 'Referencias recebidas' => count($incoming), 'Models' => count($relatedModels)]);
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Migrations de origem</h2>' . $migrationItems . '</section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Colunas</h2><div class="mt-3 overflow-hidden rounded-lg border"><table class="min-w-full text-left text-sm"><thead class="bg-slate-100 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Coluna</th><th class="px-3 py-2">Tipo</th><th class="px-3 py-2">Origem</th></tr></thead><tbody>' . ($columnsRows ?: '<tr><td colspan="3" class="px-3 py-3 text-sm text-slate-500">Nenhuma coluna detectada.</td></tr>') . '</tbody></table></div></section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Foreign keys de saida</h2><div class="mt-3 overflow-hidden rounded-lg border"><table class="min-w-full text-left text-sm"><thead class="bg-slate-100 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Coluna</th><th class="px-3 py-2">Referencia</th><th class="px-3 py-2">Origem</th></tr></thead><tbody>' . ($fkRows ?: '<tr><td colspan="3" class="px-3 py-3 text-sm text-slate-500">Nenhuma foreign key saindo desta tabela.</td></tr>') . '</tbody></table></div></section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Referencias recebidas</h2><div class="mt-3 overflow-hidden rounded-lg border"><table class="min-w-full text-left text-sm"><thead class="bg-slate-100 text-xs uppercase text-slate-500"><tr><th class="px-3 py-2">Tabela/coluna</th><th class="px-3 py-2">Referencia local</th><th class="px-3 py-2">Origem</th></tr></thead><tbody>' . ($incomingRows ?: '<tr><td colspan="3" class="px-3 py-3 text-sm text-slate-500">Nenhuma foreign key apontando para esta tabela.</td></tr>') . '</tbody></table></div></section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Models associadas</h2><ul class="mt-3 grid gap-3 md:grid-cols-2">' . ($modelItems ?: '<li class="text-sm text-slate-500">Nenhuma model direta inferida para esta tabela.</li>') . '</ul></section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Joins inferidos no codigo</h2><ul class="mt-2 space-y-2 text-sm text-slate-700">' . ($joinItems ?: '<li class="text-slate-500">Nenhum join textual envolvendo esta tabela foi inferido.</li>') . '</ul></section></main></body></html>';
+
+        return $html;
     }
 
     private function renderDatabaseDiagramPage(array $migrations, array $models, array $config): string
@@ -438,20 +487,35 @@ class FlowDocsGenerator
             if (! $from || ! $to) {
                 continue;
             }
-            $x1 = $from['x'] + $from['width'];
-            $y1 = $from['y'] + 34;
-            $x2 = $to['x'];
-            $y2 = $to['y'] + 34;
-            if ($x1 > $x2) {
-                $x1 = $from['x'];
-                $x2 = $to['x'] + $to['width'];
-            }
+            $fromCenterX = $from['x'] + (int) ($from['width'] / 2);
+            $toCenterX = $to['x'] + (int) ($to['width'] / 2);
+            $fromRight = $fromCenterX <= $toCenterX;
+            $arrowBaseGap = 14;
+            $curve = 120;
+            $x1 = $fromCenterX <= $toCenterX
+                ? $from['x'] + $from['width']
+                : $from['x'];
+            $y1 = $this->diagramColumnY($from, $edge['from_column']);
+            $x2 = $fromCenterX <= $toCenterX
+                ? $to['x'] - $arrowBaseGap
+                : $to['x'] + $to['width'] + $arrowBaseGap;
+            $y2 = $this->diagramColumnY($to, $edge['to_column']);
             $mid = (int) (($x1 + $x2) / 2);
             $labelX = (int) (($x1 + $x2) / 2);
             $labelY = (int) (($y1 + $y2) / 2) - 6;
-            $path = 'M ' . $x1 . ' ' . $y1 . ' C ' . $mid . ' ' . $y1 . ', ' . $mid . ' ' . $y2 . ', ' . $x2 . ' ' . $y2;
-            $lines .= '<path d="' . $this->h($path) . '" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" opacity="0.75"></path>';
-            $lines .= '<text x="' . $labelX . '" y="' . $labelY . '" text-anchor="middle" class="fill-slate-600 text-[11px]">' . $this->h($edge['column']) . '</text>';
+            $control1X = $fromRight ? $x1 + $curve : $x1 - $curve;
+            $control2X = $fromRight ? $x2 - $curve : $x2 + $curve;
+            if (($fromRight && $control1X > $mid) || (! $fromRight && $control1X < $mid)) {
+                $control1X = $mid;
+            }
+            if (($fromRight && $control2X < $mid) || (! $fromRight && $control2X > $mid)) {
+                $control2X = $mid;
+            }
+            $path = 'M ' . $x1 . ' ' . $y1 . ' C ' . $control1X . ' ' . $y1 . ', ' . $control2X . ' ' . $y2 . ', ' . $x2 . ' ' . $y2;
+            $label = $edge['type'] . ' ' . $edge['from_column'] . ' -> ' . $edge['to_column'];
+            $title = $edge['type'] . ' ' . $edge['from'] . '.' . $edge['from_column'] . ' -> ' . $edge['to'] . '.' . $edge['to_column'];
+            $lines .= '<g class="diagram-edge cursor-pointer"><title>' . $this->h($title) . '</title><path class="diagram-edge-hit" d="' . $this->h($path) . '" fill="none" stroke="transparent" stroke-width="18"></path><path class="diagram-edge-line" d="' . $this->h($path) . '" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" opacity="0.75"></path>';
+            $lines .= '<text x="' . $labelX . '" y="' . $labelY . '" text-anchor="middle" class="diagram-edge-label fill-slate-600 text-[11px]">' . $this->h($label) . '</text></g>';
         }
 
         $cards = '';
@@ -540,9 +604,9 @@ class FlowDocsGenerator
 </script>
 HTML;
 
-        $html = $this->pageStart('Diagrama do Banco', 1) . '<main class="mx-auto max-w-7xl px-6 py-8"><a href="index.html" class="text-sm font-semibold text-blue-700">Voltar ao banco</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Diagrama do Banco</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Diagrama HTML gerado a partir das tabelas, colunas, models inferidas e foreign keys detectadas nas migrations.</p></header>';
-        $html .= $this->metricCards(['Tabelas' => count($nodes), 'Relacoes' => count($edges), 'Largura' => $width . 'px', 'Altura' => $height . 'px']);
-        $html .= '<section class="mt-8 rounded-lg border bg-white"><div class="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3"><button id="diagramZoomOut" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">-</button><span id="diagramZoomLabel" class="min-w-14 text-center text-sm font-semibold text-slate-700">100%</span><button id="diagramZoomIn" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">+</button><button id="diagramReset" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">Reset</button><span class="text-xs text-slate-500">Arraste o diagrama para navegar. Use Ctrl + scroll para zoom.</span></div><div id="diagramViewport" class="h-[72vh] overflow-hidden bg-slate-100 cursor-grab touch-none"><div id="diagramCanvas" class="relative origin-top-left bg-slate-50" style="width:' . $width . 'px;height:' . $height . 'px"><svg class="absolute inset-0" width="' . $width . '" height="' . $height . '" viewBox="0 0 ' . $width . ' ' . $height . '"><defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#2563eb"></path></marker></defs>' . $lines . '</svg>' . $cards . '</div></div></section>' . $empty . '</main>' . $script . '</body></html>';
+        $html = $this->pageStart('Diagrama do Banco', 1) . '<main class="px-6 py-8"><a href="index.html" class="text-sm font-semibold text-blue-700">Voltar ao banco</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Diagrama do Banco</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Diagrama HTML gerado a partir das tabelas, colunas, models inferidas e foreign keys detectadas nas migrations.</p></header>';
+        $html .= $this->metricCards(['Tabelas' => count($nodes), 'Relacoes' => count($edges)]);
+        $html .= '<section class="mt-8 rounded-lg border bg-white"><div class="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3"><button id="diagramZoomOut" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">-</button><span id="diagramZoomLabel" class="min-w-14 text-center text-sm font-semibold text-slate-700">100%</span><button id="diagramZoomIn" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">+</button><button id="diagramReset" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">Reset</button><span class="text-xs text-slate-500">Arraste o diagrama para navegar. Use Ctrl + scroll para zoom.</span></div><div id="diagramViewport" class="h-[82vh] min-h-[640px] overflow-hidden bg-slate-100 cursor-grab touch-none"><div id="diagramCanvas" class="relative origin-top-left bg-slate-50" style="width:' . $width . 'px;height:' . $height . 'px"><svg class="absolute inset-0" width="' . $width . '" height="' . $height . '" viewBox="0 0 ' . $width . ' ' . $height . '"><defs><marker id="arrow" markerWidth="14" markerHeight="14" refX="0" refY="0" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 -7 14 14"><path d="M0,-7 L14,0 L0,7 z" fill="context-stroke"></path></marker></defs>' . $lines . '</svg>' . $cards . '</div></div></section>' . $empty . '</main>' . $script . '</body></html>';
 
         return $html;
     }
@@ -566,18 +630,29 @@ HTML;
         $nodeWidth = 260;
         $xGap = 80;
         $yGap = 70;
-        $columns = max(1, min(3, (int) ceil(sqrt(max(1, count($tableNames))))));
+        $nodeHeights = [];
+        foreach ($tableNames as $table) {
+            $schema = $migrations['tables'][$table] ?? ['columns' => [], 'foreign_keys' => []];
+            $nodeHeights[$table] = 76 + (min(14, max(1, count($schema['columns']))) * 30);
+        }
+        $columns = $this->balancedDiagramColumns($nodeHeights, $nodeWidth, $xGap, $yGap);
+        $rowHeights = [];
         $nodes = [];
 
         foreach ($tableNames as $index => $table) {
             $schema = $migrations['tables'][$table] ?? ['columns' => [], 'foreign_keys' => []];
             $row = intdiv($index, $columns);
             $column = $index % $columns;
-            $nodeHeight = 76 + (min(14, max(1, count($schema['columns']))) * 30);
+            $nodeHeight = $nodeHeights[$table];
+            $rowHeights[$row] = max($rowHeights[$row] ?? 0, $nodeHeight);
+            $y = 40;
+            for ($i = 0; $i < $row; $i++) {
+                $y += ($rowHeights[$i] ?? $nodeHeight) + $yGap;
+            }
             $nodes[$table] = [
                 'name' => $table,
                 'x' => 40 + ($column * ($nodeWidth + $xGap)),
-                'y' => 40 + ($row * ($nodeHeight + $yGap)),
+                'y' => $y,
                 'width' => $nodeWidth,
                 'height' => $nodeHeight,
                 'columns' => $schema['columns'],
@@ -591,7 +666,9 @@ HTML;
                 $edges[] = [
                     'from' => $table,
                     'to' => $fk['references_table'],
-                    'column' => $fk['column'] . ' -> ' . $fk['references_column'],
+                    'from_column' => $fk['column'],
+                    'to_column' => $fk['references_column'],
+                    'type' => '1:N',
                 ];
             }
         }
@@ -604,6 +681,65 @@ HTML;
         }
 
         return ['nodes' => $nodes, 'edges' => $edges, 'width' => $width, 'height' => $height];
+    }
+
+    private function diagramColumnY(array $node, string $column): int
+    {
+        $headerHeight = 56;
+        $rowHeight = 30;
+        $index = 0;
+        foreach ($node['columns'] as $position => $candidate) {
+            if (($candidate['name'] ?? '') === $column) {
+                $index = (int) $position;
+                break;
+            }
+        }
+
+        return $node['y'] + $headerHeight + ($index * $rowHeight) + (int) ($rowHeight / 2);
+    }
+
+    private function incomingForeignKeys(string $table, array $migrations): array
+    {
+        $incoming = [];
+        foreach ($migrations['tables'] as $sourceTable => $schema) {
+            foreach ($schema['foreign_keys'] as $fk) {
+                if ($fk['references_table'] !== $table) {
+                    continue;
+                }
+                $incoming[] = [
+                    'table' => $sourceTable,
+                    'column' => $fk['column'],
+                    'references_column' => $fk['references_column'],
+                    'source' => $fk['source'],
+                ];
+            }
+        }
+
+        return $incoming;
+    }
+
+    private function balancedDiagramColumns(array $nodeHeights, int $nodeWidth, int $xGap, int $yGap): int
+    {
+        $count = count($nodeHeights);
+        if ($count <= 1) {
+            return 1;
+        }
+
+        $bestColumns = 1;
+        $bestScore = PHP_INT_MAX;
+        for ($columns = 1; $columns <= $count; $columns++) {
+            $rows = array_chunk(array_values($nodeHeights), $columns);
+            $width = ($columns * $nodeWidth) + (($columns - 1) * $xGap);
+            $height = array_sum(array_map(fn ($row) => max($row), $rows)) + ((count($rows) - 1) * $yGap);
+            $ratio = $height > 0 ? $width / $height : 1;
+            $score = abs(log(max(0.1, $ratio))) + ($columns > 7 ? (($columns - 7) * 0.12) : 0);
+            if ($score < $bestScore) {
+                $bestScore = $score;
+                $bestColumns = $columns;
+            }
+        }
+
+        return $bestColumns;
     }
 
     private function writeRootIndex(string $output, array $config, bool $hasServices, bool $hasControllers, bool $hasModels, bool $hasDatabase): void
@@ -627,7 +763,7 @@ HTML;
             $cards .= '<a class="rounded-lg border bg-white p-5 hover:border-blue-400" href="database/index.html"><h2 class="text-xl font-semibold">Banco de dados</h2><p class="mt-2 text-sm text-slate-600">Migrations, colunas, foreign keys e joins inferidos.</p></a>';
             $indexItems .= '<li><a class="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm hover:border-blue-400" href="database/index.html"><span>Banco de dados</span><span class="text-xs text-slate-500">schema</span></a></li><li><a class="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm hover:border-blue-400" href="database/diagram.html"><span>Diagrama do banco</span><span class="text-xs text-slate-500">visual</span></a></li>';
         }
-        $html = $this->pageStart('Flow Docs', 0) . '<main class="mx-auto max-w-5xl px-6 py-10"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Flow Docs</h1><p class="mt-3 text-sm leading-6 text-slate-600">Documentacao estatica gerada por galase/laravel-flow-docs.</p><section class="mt-8"><h2 class="text-lg font-semibold">Indice</h2><ul class="mt-3 grid gap-2 md:grid-cols-2">' . $indexItems . '</ul></section><section class="mt-8 grid gap-4 md:grid-cols-2">' . $cards . '</section></main></body></html>';
+        $html = $this->pageStart('Flow Docs', 0) . '<main class="mx-auto max-w-5xl px-6 py-10"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . $this->h($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Flow Docs</h1><p class="mt-3 text-sm leading-6 text-slate-600">Documentacao estatica gerada por galase/laravel-flow-docs.</p><section class="mt-8"><h2 class="text-lg font-semibold">Indice</h2><ul class="mt-3 grid gap-2 md:grid-cols-2">' . $indexItems . '</ul></section></main></body></html>';
         file_put_contents($output . '/index.html', $html);
     }
 
@@ -1351,6 +1487,11 @@ HTML;
         return str_replace('\\', '__', $fqcn) . '.html';
     }
 
+    private function tableFileName(string $table): string
+    {
+        return (preg_replace('/[^A-Za-z0-9_-]+/', '_', $table) ?? 'table') . '.html';
+    }
+
     private function h($value): string
     {
         return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -1379,7 +1520,7 @@ HTML;
             $links .= '<a class="rounded px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950" href="' . $this->h($href) . '">' . $this->h($label) . '</a>';
         }
 
-        return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . $this->h($title) . '</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-50 text-slate-900"><nav class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur"><div class="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-3 md:flex-row md:items-center md:justify-between"><a class="text-sm font-semibold text-slate-950" href="' . $this->h($root . 'index.html') . '">Flow Docs</a><div class="flex flex-wrap gap-1">' . $links . '</div></div></nav>';
+        return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . $this->h($title) . '</title><script src="https://cdn.tailwindcss.com"></script><style>.diagram-edge-line{transition:stroke .15s ease,stroke-width .15s ease,opacity .15s ease;}.diagram-edge-label{transition:fill .15s ease,font-weight .15s ease;paint-order:stroke;stroke:#f8fafc;stroke-width:4px;stroke-linejoin:round;}.diagram-edge:hover .diagram-edge-line{stroke:#f97316;stroke-width:5;opacity:1;}.diagram-edge:hover .diagram-edge-label{fill:#c2410c;font-weight:700;}.diagram-edge:hover{filter:drop-shadow(0 2px 4px rgba(249,115,22,.35));}</style></head><body class="bg-slate-50 text-slate-900"><nav class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur"><div class="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-3 md:flex-row md:items-center md:justify-between"><a class="text-sm font-semibold text-slate-950" href="' . $this->h($root . 'index.html') . '">Flow Docs</a><div class="flex flex-wrap gap-1">' . $links . '</div></div></nav>';
     }
 
     private function metricCards(array $cards): string

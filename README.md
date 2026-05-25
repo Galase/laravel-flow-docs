@@ -25,6 +25,7 @@ public/docs/flow/database/diagram.html
 ```
 
 The generated pages include a top navigation bar and index sections. The database diagram supports zoom controls, reset, Ctrl + scroll zoom, and drag-to-pan navigation.
+Each table detected from migrations also gets its own page under `public/docs/flow/database/tables/`.
 
 ## Command
 
