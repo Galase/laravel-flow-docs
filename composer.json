@@ -41,7 +41,19 @@
         "check": [
             "@php -l src/FlowDocsServiceProvider.php",
             "@php -l src/Console/GenerateFlowDocsCommand.php",
-            "@php -l src/FlowDocsGenerator.php"
+            "@php -l src/FlowDocsGenerator.php",
+            "@php -l src/Support/Html/Html.php",
+            "@php -l src/Support/Html/HtmlPage.php",
+            "@php -l src/Support/Analysis/TextAnalyzer.php",
+            "@php -l src/Support/Analysis/PhpSourceAnalyzer.php",
+            "@php -l src/Support/Analysis/MigrationAnalyzer.php",
+            "@php -l src/Support/Analysis/CodeAnalyzer.php",
+            "@php -l src/Support/Docs/RootIndexRenderer.php",
+            "@php -l src/Support/Docs/ClassDocsGenerator.php",
+            "@php -l src/Support/Docs/ModelDocsGenerator.php",
+            "@php -l src/Support/Docs/DatabaseDocsGenerator.php",
+            "@php -l src/Support/Diagram/DatabaseDiagramBuilder.php",
+            "@php -l src/Support/Diagram/DatabaseDiagramRenderer.php"
         ]
     },
     "minimum-stability": "stable",
