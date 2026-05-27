@@ -6,11 +6,13 @@ namespace Galase\FlowDocs\Support\Diagram;
 
 use Galase\FlowDocs\Support\Html\Html;
 use Galase\FlowDocs\Support\Html\HtmlPage;
+use Galase\FlowDocs\Support\I18n\Translator;
 
 final class DatabaseDiagramRenderer
 {
     public static function render(array $migrations, array $models, array $config, callable $modelTableName): string
     {
+        $translator = Translator::fromConfig($config);
         $diagram = DatabaseDiagramBuilder::build($migrations, $models, $modelTableName);
         $nodes = $diagram['nodes'];
         $edges = $diagram['edges'];
@@ -18,14 +20,14 @@ final class DatabaseDiagramRenderer
         $height = $diagram['height'];
 
         $lines = self::renderEdges($edges, $nodes);
-        $cards = self::renderCards($nodes);
+        $cards = self::renderCards($nodes, $translator);
         $empty = $nodes
             ? ''
-            : '<section class="rounded-lg border bg-white p-5 text-sm text-slate-500">Nenhuma tabela encontrada para desenhar.</section>';
+            : '<section class="rounded-lg border bg-white p-5 text-sm text-slate-500">' . Html::escape($translator->t('database.diagram_empty')) . '</section>';
 
-        $html = HtmlPage::start('Diagrama do Banco', 1) . '<main class="px-6 py-8"><a href="index.html" class="text-sm font-semibold text-blue-700">Voltar ao banco</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . Html::escape($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">Diagrama do Banco</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Diagrama HTML gerado a partir das tabelas, colunas, models inferidas e foreign keys detectadas nas migrations.</p></header>';
-        $html .= HtmlPage::metricCards(['Tabelas' => count($nodes), 'Relacoes' => count($edges)]);
-        $html .= '<section class="mt-8 rounded-lg border bg-white"><div class="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3"><button id="diagramZoomOut" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">-</button><span id="diagramZoomLabel" class="min-w-14 text-center text-sm font-semibold text-slate-700">100%</span><button id="diagramZoomIn" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">+</button><button id="diagramReset" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">Reset</button></div><div id="diagramViewport" class="relative h-[82vh] min-h-[640px] overflow-hidden bg-slate-100 touch-none"><aside class="pointer-events-none absolute left-4 top-4 z-20 max-w-sm rounded-lg border border-slate-300 bg-white/90 p-4 text-sm leading-6 text-slate-800 shadow-md backdrop-blur"><p class="font-semibold text-slate-950">Como navegar</p><ul class="mt-2 list-disc space-y-1 pl-5"><li>Use os botoes ou Ctrl + scroll para aproximar e afastar.</li><li>Arraste com o botao direito para mover o diagrama.</li><li>Use o botao esquerdo para selecionar textos dos cards.</li><li>Passe o mouse em um card para destacar suas conexoes.</li></ul></aside><div id="diagramCanvas" class="relative origin-top-left bg-slate-50" style="width:' . $width . 'px;height:' . $height . 'px"><svg class="absolute inset-0" width="' . $width . '" height="' . $height . '" viewBox="0 0 ' . $width . ' ' . $height . '"><defs><marker id="arrow" markerWidth="14" markerHeight="14" refX="0" refY="0" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 -7 14 14"><path d="M0,-7 L14,0 L0,7 z" fill="context-stroke"></path></marker></defs>' . $lines . '</svg>' . $cards . '</div></div></section>' . $empty . '</main>' . self::script() . '</body></html>';
+        $html = HtmlPage::start($translator->t('database.diagram_title'), 1, $config) . '<main class="px-6 py-8"><a href="index.html" class="text-sm font-semibold text-blue-700">' . Html::escape($translator->t('common.back_to_database')) . '</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . Html::escape($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">' . Html::escape($translator->t('database.diagram_title')) . '</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">' . Html::escape($translator->t('database.diagram_description')) . '</p></header>';
+        $html .= HtmlPage::metricCards([$translator->t('database.tables') => count($nodes), $translator->t('database.relationships') => count($edges)], $config);
+        $html .= '<section class="mt-8 rounded-lg border bg-white"><div class="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3"><button id="diagramZoomOut" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">-</button><span id="diagramZoomLabel" class="min-w-14 text-center text-sm font-semibold text-slate-700">100%</span><button id="diagramZoomIn" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">+</button><button id="diagramReset" class="rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50" type="button">' . Html::escape($translator->t('diagram.zoom_reset')) . '</button></div><div id="diagramViewport" class="relative h-[82vh] min-h-[640px] overflow-hidden bg-slate-100 touch-none"><aside class="pointer-events-none absolute left-4 top-4 z-20 max-w-sm rounded-lg border border-slate-300 bg-white/90 p-4 text-sm leading-6 text-slate-800 shadow-md backdrop-blur"><p class="font-semibold text-slate-950">' . Html::escape($translator->t('database.diagram_help_title')) . '</p><ul class="mt-2 list-disc space-y-1 pl-5"><li>' . Html::escape($translator->t('database.diagram_help_zoom')) . '</li><li>' . Html::escape($translator->t('database.diagram_help_pan')) . '</li><li>' . Html::escape($translator->t('database.diagram_help_select')) . '</li><li>' . Html::escape($translator->t('database.diagram_help_hover')) . '</li></ul></aside><div id="diagramCanvas" class="relative origin-top-left bg-slate-50" style="width:' . $width . 'px;height:' . $height . 'px"><svg class="absolute inset-0" width="' . $width . '" height="' . $height . '" viewBox="0 0 ' . $width . ' ' . $height . '"><defs><marker id="arrow" markerWidth="14" markerHeight="14" refX="0" refY="0" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 -7 14 14"><path d="M0,-7 L14,0 L0,7 z" fill="context-stroke"></path></marker></defs>' . $lines . '</svg>' . $cards . '</div></div></section>' . $empty . '</main>' . self::script() . '</body></html>';
 
         return $html;
     }
@@ -69,7 +71,7 @@ final class DatabaseDiagramRenderer
         return $lines;
     }
 
-    private static function renderCards(array $nodes): string
+    private static function renderCards(array $nodes, Translator $translator): string
     {
         $cards = '';
         foreach ($nodes as $node) {
@@ -79,12 +81,12 @@ final class DatabaseDiagramRenderer
                 $columnItems .= '<li class="flex items-center justify-between gap-3 border-t border-slate-100 px-3 py-1.5"><code class="truncate text-xs text-slate-700">' . Html::escape($column['name']) . '</code><span class="shrink-0 text-[11px] text-slate-500">' . Html::escape($column['type']) . '</span></li>';
             }
             if (count($node['columns']) > count($columns)) {
-                $columnItems .= '<li class="border-t border-slate-100 px-3 py-1.5 text-xs text-slate-500">+' . (count($node['columns']) - count($columns)) . ' colunas</li>';
+                $columnItems .= '<li class="border-t border-slate-100 px-3 py-1.5 text-xs text-slate-500">' . Html::escape($translator->t('database.more_columns', ['count' => count($node['columns']) - count($columns)])) . '</li>';
             }
             if ($columnItems === '') {
-                $columnItems = '<li class="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">Sem colunas detectadas.</li>';
+                $columnItems = '<li class="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">' . Html::escape($translator->t('database.no_columns_short')) . '</li>';
             }
-            $modelLabel = $node['models'] ? implode(', ', $node['models']) : 'sem model direta';
+            $modelLabel = $node['models'] ? implode(', ', $node['models']) : $translator->t('database.without_direct_model');
             $cards .= '<section class="diagram-card absolute overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm outline-none" tabindex="0" data-table="' . Html::escape($node['name']) . '" style="left:' . $node['x'] . 'px;top:' . $node['y'] . 'px;width:' . $node['width'] . 'px">';
             $cards .= '<header class="border-b border-slate-200 bg-slate-900 px-3 py-2 text-white"><h2 class="truncate text-sm font-semibold">' . Html::escape($node['name']) . '</h2><p class="mt-0.5 truncate text-[11px] text-slate-300">' . Html::escape($modelLabel) . '</p></header>';
             $cards .= '<ul class="max-h-72 overflow-hidden bg-white">' . $columnItems . '</ul></section>';

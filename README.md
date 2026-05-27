@@ -53,6 +53,7 @@ return [
     'app_dir' => app_path(),
     'migration_dirs' => [database_path('migrations')],
     'project_name' => config('app.name', 'Laravel'),
+    'language' => 'pt_BR', // Supported now: pt_BR, en, es. Catalogs live in Support/I18n/Languages.
     'controller_namespaces' => ['App\\Http\\Controllers'],
     'service_namespaces' => ['App\\Services', 'App\\Http\\Services', 'App\\Actions', 'App\\Domain'],
     'model_namespaces' => ['App\\Models', 'App'],

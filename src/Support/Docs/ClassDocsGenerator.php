@@ -6,11 +6,13 @@ namespace Galase\FlowDocs\Support\Docs;
 
 use Galase\FlowDocs\Support\Html\Html;
 use Galase\FlowDocs\Support\Html\HtmlPage;
+use Galase\FlowDocs\Support\I18n\Translator;
 
 final class ClassDocsGenerator
 {
     public static function generate(array $classes, string $kind, array $allClasses, array $config, string $output, array $routes, array $tools): int
     {
+        $translator = Translator::fromConfig($config);
         $base = $output . '/' . $kind;
         $items = $base . '/' . $kind;
         self::ensureDirectory($items);
@@ -27,14 +29,14 @@ final class ClassDocsGenerator
             foreach ($class['methods'] as $method) {
                 $routeCount += count($routes[$fqcn . '@' . $method['name']] ?? []);
             }
-            $indexItems .= '<li><a class="flex items-center justify-between gap-4 rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-blue-400" href="' . $kind . '/' . Html::escape($fileName) . '"><span class="break-all font-medium text-slate-900">' . Html::escape($fqcn) . '</span><span class="shrink-0 text-xs text-slate-500">' . $public . ' publicos</span></a></li>';
+            $indexItems .= '<li><a class="flex items-center justify-between gap-4 rounded border border-slate-200 bg-white px-3 py-2 text-sm hover:border-blue-400" href="' . $kind . '/' . Html::escape($fileName) . '"><span class="break-all font-medium text-slate-900">' . Html::escape($fqcn) . '</span><span class="shrink-0 text-xs text-slate-500">' . Html::escape($translator->t('common.public_count', ['count' => $public])) . '</span></a></li>';
         }
 
-        $title = $kind === 'services' ? 'Documentacao por Service' : 'Documentacao por Controller';
-        $index = HtmlPage::start($title, 1) . '<main class="mx-auto max-w-7xl px-6 py-8">';
+        $title = $kind === 'services' ? $translator->t('class.service_title') : $translator->t('class.controller_title');
+        $index = HtmlPage::start($title, 1, $config) . '<main class="mx-auto max-w-7xl px-6 py-8">';
         $index .= self::optionalBackLink($config);
-        $index .= '<header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . Html::escape($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">' . Html::escape($title) . '</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">Documentacao estatica gerada a partir dos arquivos PHP. Inclui metodos, chamadas, models detectadas, variaveis inferidas por retorno de metodos internos e leitura objetiva do que cada fluxo faz.</p></header>';
-        $index .= '<section class="mt-8"><h2 class="text-lg font-semibold">Indice</h2><ul class="mt-3 grid gap-2 lg:grid-cols-2">' . ($indexItems ?: '<li class="rounded border bg-white px-3 py-2 text-sm text-slate-500">Nenhum item detectado.</li>') . '</ul></section>';
+        $index .= '<header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . Html::escape($config['project_name'] ?? 'Laravel') . '</p><h1 class="mt-2 text-3xl font-semibold">' . Html::escape($title) . '</h1><p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">' . Html::escape($translator->t('class.description')) . '</p></header>';
+        $index .= '<section class="mt-8"><h2 class="text-lg font-semibold">' . Html::escape($translator->t('common.index')) . '</h2><ul class="mt-3 grid gap-2 lg:grid-cols-2">' . ($indexItems ?: '<li class="rounded border bg-white px-3 py-2 text-sm text-slate-500">' . Html::escape($translator->t('class.no_items')) . '</li>') . '</ul></section>';
         $index .= '</main></body></html>';
         file_put_contents($base . '/index.html', $index);
         $files++;
@@ -49,47 +51,49 @@ final class ClassDocsGenerator
 
     private static function renderPage(string $fqcn, array $class, string $kind, array $config, array $returnIndex, array $usedBy, array $routes, array $tools): string
     {
+        $translator = Translator::fromConfig($config);
         $imports = $class['imports']
             ? '<ul class="mt-2 grid gap-1 text-xs text-slate-600 md:grid-cols-2">' . implode('', array_map(fn ($i) => '<li><code>' . Html::escape($i) . '</code></li>', $class['imports'])) . '</ul>'
-            : '<p class="mt-2 text-sm text-slate-500">Nenhum import direto detectado.</p>';
+            : '<p class="mt-2 text-sm text-slate-500">' . Html::escape($translator->t('class.no_direct_imports')) . '</p>';
         $usageHtml = $usedBy
             ? '<ul class="mt-2 grid gap-1 text-xs text-slate-600 md:grid-cols-2">' . implode('', array_map(fn ($i) => '<li><code>' . Html::escape($i) . '</code></li>', $usedBy)) . '</ul>'
-            : '<p class="mt-2 text-sm text-slate-500">Nenhum uso textual detectado em app/.</p>';
-        $dependencies = $tools['dependencyInjections']($class);
+            : '<p class="mt-2 text-sm text-slate-500">' . Html::escape($translator->t('class.no_textual_usage')) . '</p>';
+        $dependencies = $tools['dependencyInjections']($class, $config);
         $dependenciesHtml = $dependencies
             ? '<ul class="mt-2 space-y-2 text-sm text-slate-700">' . implode('', array_map(fn ($dependency) => '<li><code>' . Html::escape($dependency['type'] . ' $' . $dependency['name']) . '</code><span class="ml-2 text-slate-500">' . Html::escape($dependency['where']) . '</span></li>', $dependencies)) . '</ul>'
-            : '<p class="mt-2 text-sm text-slate-500">Nenhuma injecao por construtor ou metodo tipado detectada.</p>';
+            : '<p class="mt-2 text-sm text-slate-500">' . Html::escape($translator->t('class.no_injection')) . '</p>';
 
         $sections = '';
         foreach ($class['methods'] as $method) {
-            $inferred = $tools['inferVariableModels']($method, $class, $returnIndex);
+            $inferred = $tools['inferVariableModels']($method, $class, $returnIndex, $config);
             $models = $tools['detectModels']($method, $class, $returnIndex, $config);
             $actions = $tools['detectActions']($method['body'], $config);
-            $calls = $tools['detectCalls']($method['body']);
+            $calls = $tools['detectCalls']($method['body'], $config);
             $purpose = $tools['explicitPurpose']($method, $models, $inferred, $config);
             $methodRoutes = $routes[$fqcn . '@' . $method['name']] ?? [];
             $routesHtml = $methodRoutes
                 ? '<ul class="space-y-1">' . implode('', array_map(fn ($r) => '<li><code>' . Html::escape(($r['method'] ?? '') . ' ' . ($r['uri'] ?? '')) . '</code>' . (! empty($r['name']) ? '<span class="ml-2 text-slate-500">' . Html::escape($r['name']) . '</span>' : '') . '</li>', $methodRoutes)) . '</ul>'
-                : '<span class="text-slate-400">Sem rota direta; chamado internamente, por service, job, observer ou legado.</span>';
+                : '<span class="text-slate-400">' . Html::escape($translator->t('class.no_direct_route')) . '</span>';
             $varsHtml = $inferred
                 ? '<ul class="mt-2 space-y-1">' . implode('', array_map(fn ($var, $meta) => '<li><code>$' . Html::escape($var) . '</code> => <strong>' . Html::escape($meta['model']) . '</strong><span class="text-slate-500"> (' . Html::escape($meta['source']) . ')</span></li>', array_keys($inferred), $inferred)) . '</ul>'
-                : '<p class="mt-2 text-sm text-slate-500">Nenhuma variavel com model inferida por retorno interno.</p>';
+                : '<p class="mt-2 text-sm text-slate-500">' . Html::escape($translator->t('class.no_inferred_model_var')) . '</p>';
 
-            $flowCode = self::annotatedMethodCode($method, $tools['lineExplanations']($method, $inferred));
+            $flowCode = self::annotatedMethodCode($method, $tools['lineExplanations']($method, $inferred, $config), $config);
 
-            $sections .= '<section class="rounded-lg border border-slate-200 bg-white p-5"><div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><h2 class="text-lg font-semibold">' . Html::escape($method['name']) . '</h2><p class="mt-1 text-xs text-slate-500">' . Html::escape($method['visibility'] . ($method['static'] ? ' static' : '')) . ' - linhas ' . Html::escape($method['startLine']) . ' a ' . Html::escape($method['endLine']) . '</p></div><span class="text-xs font-semibold text-slate-500">' . Html::escape($class['path']) . '</span></div>';
+            $sections .= '<section class="rounded-lg border border-slate-200 bg-white p-5"><div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between"><div><h2 class="text-lg font-semibold">' . Html::escape($method['name']) . '</h2><p class="mt-1 text-xs text-slate-500">' . Html::escape($translator->t('class.method_meta', ['visibility' => $method['visibility'] . ($method['static'] ? ' static' : ''), 'start' => $method['startLine'], 'end' => $method['endLine']])) . '</p></div><span class="text-xs font-semibold text-slate-500">' . Html::escape($class['path']) . '</span></div>';
             $sections .= '<p class="mt-4 text-sm leading-6 text-slate-700">' . Html::escape($purpose) . '</p>';
-            $sections .= '<div class="mt-4 grid gap-4 lg:grid-cols-3"><div><h3 class="text-xs font-semibold uppercase text-slate-500">Rotas ligadas</h3><div class="mt-2 text-sm">' . $routesHtml . '</div></div><div><h3 class="text-xs font-semibold uppercase text-slate-500">Models/entidades</h3><p class="mt-2 text-sm text-slate-600">' . Html::escape($models ? implode(', ', $models) : 'Nenhum model direto ou inferido') . '</p></div><div><h3 class="text-xs font-semibold uppercase text-slate-500">Acoes</h3><p class="mt-2 text-sm text-slate-600">' . Html::escape(implode(' | ', $actions)) . '</p></div></div>';
-            $sections .= '<div class="mt-4 rounded-lg bg-slate-50 p-4"><h3 class="text-xs font-semibold uppercase text-slate-500">Variaveis inferidas como model</h3>' . $varsHtml . '</div>';
-            $sections .= '<div class="mt-4"><h3 class="text-xs font-semibold uppercase text-slate-500">Chamadas internas</h3><p class="mt-2 text-sm text-slate-600">' . Html::escape($calls ? implode(' | ', array_slice($calls, 0, 24)) : 'Sem chamadas relevantes detectadas') . '</p></div>';
-            $sections .= '<div class="mt-5"><h3 class="text-xs font-semibold uppercase text-slate-500">Codigo anotado</h3><pre class="code-dracula mt-2 overflow-x-auto rounded-lg border p-4 text-xs leading-6"><code class="language-php">' . self::highlightPhp($flowCode) . '</code></pre></div></section>';
+            $sections .= '<div class="mt-4 grid gap-4 lg:grid-cols-3"><div><h3 class="text-xs font-semibold uppercase text-slate-500">' . Html::escape($translator->t('common.routes')) . '</h3><div class="mt-2 text-sm">' . $routesHtml . '</div></div><div><h3 class="text-xs font-semibold uppercase text-slate-500">' . Html::escape($translator->t('common.models_entities')) . '</h3><p class="mt-2 text-sm text-slate-600">' . Html::escape($models ? implode(', ', $models) : $translator->t('class.no_direct_model')) . '</p></div><div><h3 class="text-xs font-semibold uppercase text-slate-500">' . Html::escape($translator->t('common.actions')) . '</h3><p class="mt-2 text-sm text-slate-600">' . Html::escape(implode(' | ', $actions)) . '</p></div></div>';
+            $sections .= '<div class="mt-4 rounded-lg bg-slate-50 p-4"><h3 class="text-xs font-semibold uppercase text-slate-500">' . Html::escape($translator->t('class.variables_as_model')) . '</h3>' . $varsHtml . '</div>';
+            $sections .= '<div class="mt-4"><h3 class="text-xs font-semibold uppercase text-slate-500">' . Html::escape($translator->t('class.internal_calls')) . '</h3><p class="mt-2 text-sm text-slate-600">' . Html::escape($calls ? implode(' | ', array_slice($calls, 0, 24)) : $translator->t('class.no_relevant_calls')) . '</p></div>';
+            $sections .= '<div class="mt-5"><h3 class="text-xs font-semibold uppercase text-slate-500">' . Html::escape($translator->t('class.annotated_code')) . '</h3><pre class="code-dracula mt-2 overflow-x-auto rounded-lg border p-4 text-xs leading-6"><code class="language-php">' . self::highlightPhp($flowCode) . '</code></pre></div></section>';
         }
 
-        $html = HtmlPage::start($fqcn, 2) . '<main class="mx-auto max-w-7xl px-6 py-8"><a href="../index.html" class="text-sm font-semibold text-blue-700">Voltar ao indice</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">Documentacao por ' . Html::escape(rtrim($kind, 's')) . '</p><h1 class="mt-2 break-words text-3xl font-semibold">' . Html::escape($fqcn) . '</h1><p class="mt-3 text-sm text-slate-600"><code>' . Html::escape($class['path']) . '</code></p></header>';
-        $html .= HtmlPage::metricCards(['Metodos' => count($class['methods']), 'Publicos' => count(array_filter($class['methods'], fn ($m) => $m['visibility'] === 'public')), 'Usos detectados' => count($usedBy), 'Linhas' => $class['lines']]);
-        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Onde aparece</h2>' . $usageHtml . '</section>';
-        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Dependencias importadas</h2>' . $imports . '</section>';
-        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">Injecao de dependencias</h2>' . $dependenciesHtml . '</section>';
+        $kindLabel = $kind === 'services' ? $translator->t('class.kind_service') : $translator->t('class.kind_controller');
+        $html = HtmlPage::start($fqcn, 2, $config) . '<main class="mx-auto max-w-7xl px-6 py-8"><a href="../index.html" class="text-sm font-semibold text-blue-700">' . Html::escape($translator->t('common.back_to_index')) . '</a><header class="mt-4 border-b border-slate-200 pb-6"><p class="text-sm font-semibold uppercase tracking-wide text-blue-700">' . Html::escape($translator->t('class.doc_by_kind', ['kind' => $kindLabel])) . '</p><h1 class="mt-2 break-words text-3xl font-semibold">' . Html::escape($fqcn) . '</h1><p class="mt-3 text-sm text-slate-600"><code>' . Html::escape($class['path']) . '</code></p></header>';
+        $html .= HtmlPage::metricCards([$translator->t('metric.methods') => count($class['methods']), $translator->t('metric.public') => count(array_filter($class['methods'], fn ($m) => $m['visibility'] === 'public')), $translator->t('metric.usages') => count($usedBy), $translator->t('metric.lines') => $class['lines']], $config);
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">' . Html::escape($translator->t('class.where_appears')) . '</h2>' . $usageHtml . '</section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">' . Html::escape($translator->t('class.imported_dependencies')) . '</h2>' . $imports . '</section>';
+        $html .= '<section class="mt-6 rounded-lg border bg-white p-5"><h2 class="text-lg font-semibold">' . Html::escape($translator->t('class.dependency_injection')) . '</h2>' . $dependenciesHtml . '</section>';
         $html .= '<section class="mt-6 space-y-5">' . $sections . '</section></main></body></html>';
 
         return $html;
@@ -102,8 +106,9 @@ final class ClassDocsGenerator
         }
     }
 
-    private static function annotatedMethodCode(array $method, array $explanations): string
+    private static function annotatedMethodCode(array $method, array $explanations, array $config): string
     {
+        $translator = Translator::fromConfig($config);
         $commentsByLine = [];
         foreach ($explanations as $row) {
             if (($row['line'] ?? '') === '') {
@@ -119,7 +124,7 @@ final class ClassDocsGenerator
         $code[] = '{';
 
         if (trim($method['body']) === '') {
-            $code[] = '    // Metodo sem corpo operacional relevante.';
+            $code[] = '    // ' . $translator->t('analysis.empty_method');
         } else {
             foreach ($lines as $index => $line) {
                 $sourceLine = ((int) ($method['startLine'] ?? 0)) + $firstLineOffset + $index + 1;
@@ -231,6 +236,6 @@ final class ClassDocsGenerator
             return '';
         }
 
-        return '<a href="' . Html::escape($config['back_link']) . '" class="text-sm font-semibold text-blue-700">Voltar</a>';
+        return '<a href="' . Html::escape($config['back_link']) . '" class="text-sm font-semibold text-blue-700">' . Html::escape(Translator::fromConfig($config)->t('common.back')) . '</a>';
     }
 }

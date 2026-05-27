@@ -201,18 +201,18 @@ PHP);
         $this->assertStringContainsString('id="flowDocsThemeToggle"', $html);
         $this->assertStringContainsString("window.tailwind.config = { darkMode: 'class' }", $html);
         $this->assertStringContainsString('flow-docs-theme', $html);
-        $this->assertStringContainsString('Metodo montaPayloadLytex constroi o payload para o gateway Lytex', $html);
-        $this->assertStringContainsString('Codigo anotado', $html);
+        $this->assertStringContainsString('Método montaPayloadLytex constrói o payload para o gateway Lytex', $html);
+        $this->assertStringContainsString('Código anotado', $html);
         $this->assertStringContainsString('code-dracula', $html);
         $this->assertStringContainsString('tok-variable', $html);
         $this->assertStringContainsString('tok-comment', $html);
         $this->assertStringContainsString('language-php', $html);
         $this->assertStringNotContainsString('```php', $html);
-        $this->assertStringContainsString('Atribui a $aluno o retorno de $this-&gt;buscaAluno($id), executado na instancia atual; o valor e tratado como Aluno pelas inferencias.', $html);
-        $this->assertStringContainsString('Atribui a $count o resultado de uma query em Category que filtra registros em que active seja true e conta o total encontrado; o valor e tratado como Category pelas inferencias.', $html);
-        $this->assertStringContainsString('Preenche o campo news com o retorno de $this-&gt;newsService-&gt;getAllNews(), acessando a propriedade newsService da instancia atual.', $html);
+        $this->assertStringContainsString('Atribui a $aluno o retorno de $this-&gt;buscaAluno($id), executado na instância atual; o valor é tratado como Aluno pelas inferências.', $html);
+        $this->assertStringContainsString('Atribui a $count o resultado de uma query de Category que filtra registros em que active seja true e conta o total encontrado; o valor é tratado como Category pelas inferências.', $html);
+        $this->assertStringContainsString('Preenche o campo news com o retorno de $this-&gt;newsService-&gt;getAllNews(), acessando a propriedade newsService da instância atual.', $html);
         $this->assertStringContainsString('Aplica em $query filtro em que index seja $filters[&#039;index&#039;].', $html);
-        $this->assertStringContainsString('Retorna $query filtrado em que active seja true e name corresponda a $this-&gt;search, ordenado por id desc, paginado por $perPage e com query string para quem chamou o metodo.', $html);
+        $this->assertStringContainsString('Retorna $query filtrado em que active seja true e name corresponda a $this-&gt;search, ordenado por id desc, paginado por $perPage e com query string para quem chamou o método.', $html);
         $this->assertStringContainsString('$aluno', $html);
         $this->assertStringContainsString('Aluno', $html);
     }
@@ -246,7 +246,7 @@ PHP);
         $this->assertStringContainsString('Banco de dados', $root);
         $this->assertStringContainsString('Flow Docs', $root);
         $this->assertStringContainsString('hasMany', $model);
-        $this->assertStringContainsString('Indice', $database);
+        $this->assertStringContainsString('Índice', $database);
         $this->assertStringContainsString('tables/alunos.html', $database);
         $this->assertStringContainsString('Diagrama do banco', $database);
         $this->assertStringContainsString('Diagrama do Banco', $diagram);
@@ -268,15 +268,63 @@ PHP);
         $this->assertStringContainsString('bg-white/90', $diagram);
         $this->assertStringContainsString('list-disc', $diagram);
         $this->assertStringContainsString('Como navegar', $diagram);
-        $this->assertStringContainsString('Arraste com o botao direito', $diagram);
-        $this->assertStringContainsString('botao esquerdo para selecionar textos dos cards', $diagram);
-        $this->assertStringContainsString('destacar suas conexoes', $diagram);
+        $this->assertStringContainsString('Arraste com o botão direito', $diagram);
+        $this->assertStringContainsString('botão esquerdo para selecionar textos dos cards', $diagram);
+        $this->assertStringContainsString('destacar suas conexões', $diagram);
         $this->assertStringContainsString('alunos', $diagram);
         $this->assertStringContainsString('1:N turma_id -&gt; id', $diagram);
         $this->assertStringContainsString('Tabela do banco', $table);
-        $this->assertStringContainsString('Foreign keys de saida', $table);
+        $this->assertStringContainsString('Foreign keys de saída', $table);
         $this->assertStringContainsString('turmas.id', $table);
         $this->assertStringContainsString('turmas.id', $service);
         $this->assertStringContainsString('MatriculaService $matriculas', $controller);
+    }
+
+    public function test_command_generates_english_docs_when_language_is_configured(): void
+    {
+        File::copy(__DIR__ . '/../../config/flow-docs.php', config_path('flow-docs.php'));
+
+        config()->set('flow-docs.output_path', base_path('flow-docs-output'));
+        config()->set('flow-docs.app_dir', app_path());
+        config()->set('flow-docs.language', 'en');
+
+        $this->artisan('flow-docs:generate --services --no-routes')
+            ->assertExitCode(0);
+
+        $root = File::get(base_path('flow-docs-output/index.html'));
+        $html = File::get(base_path('flow-docs-output/services/services/App__Services__AlunoService.html'));
+
+        $this->assertStringContainsString('<html lang="en">', $html);
+        $this->assertStringContainsString('Static documentation generated by galase/laravel-flow-docs.', $root);
+        $this->assertStringContainsString('Service Documentation', $html);
+        $this->assertStringContainsString('Annotated code', $html);
+        $this->assertStringContainsString('Method montaPayloadLytex builds the payload for the Lytex gateway', $html);
+        $this->assertStringContainsString('Assigns the return value of $this-&gt;buscaAluno($id), executed on the current instance to $aluno; the value is treated as Aluno by the inferences.', $html);
+        $this->assertStringContainsString('Fills the news field with the return value of $this-&gt;newsService-&gt;getAllNews(), accessing the newsService property on the current instance.', $html);
+        $this->assertStringContainsString('Applies to $query a filter where index is $filters[&#039;index&#039;].', $html);
+        $this->assertStringContainsString('Returns $query filtered where active is true and name matches $this-&gt;search, ordered by id desc, paginated by $perPage and with query string to the caller.', $html);
+    }
+
+    public function test_command_generates_spanish_docs_when_language_is_configured(): void
+    {
+        File::copy(__DIR__ . '/../../config/flow-docs.php', config_path('flow-docs.php'));
+
+        config()->set('flow-docs.output_path', base_path('flow-docs-output'));
+        config()->set('flow-docs.app_dir', app_path());
+        config()->set('flow-docs.language', 'es');
+
+        $this->artisan('flow-docs:generate --services --no-routes')
+            ->assertExitCode(0);
+
+        $root = File::get(base_path('flow-docs-output/index.html'));
+        $html = File::get(base_path('flow-docs-output/services/services/App__Services__AlunoService.html'));
+
+        $this->assertStringContainsString('<html lang="es">', $html);
+        $this->assertStringContainsString('Documentación estática generada por galase/laravel-flow-docs.', $root);
+        $this->assertStringContainsString('Documentación por Servicio', $html);
+        $this->assertStringContainsString('Código anotado', $html);
+        $this->assertStringContainsString('Método montaPayloadLytex construye el payload para el gateway Lytex', $html);
+        $this->assertStringContainsString('Asigna a $aluno el retorno de $this-&gt;buscaAluno($id), ejecutado en la instancia actual; el valor es tratado como Aluno por las inferencias.', $html);
+        $this->assertStringContainsString('Rellena el campo news con el retorno de $this-&gt;newsService-&gt;getAllNews(), accediendo a la propiedad newsService de la instancia actual.', $html);
     }
 }

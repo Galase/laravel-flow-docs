@@ -4,28 +4,31 @@ declare(strict_types=1);
 
 namespace Galase\FlowDocs\Support\Html;
 
+use Galase\FlowDocs\Support\I18n\Translator;
+
 final class HtmlPage
 {
-    public static function start(string $title, int $depth = 0): string
+    public static function start(string $title, int $depth = 0, array $config = []): string
     {
+        $translator = Translator::fromConfig($config);
         $root = str_repeat('../', $depth);
         $nav = [
-            'Inicio' => $root . 'index.html',
-            'Services' => $root . 'services/index.html',
-            'Controllers' => $root . 'controllers/index.html',
-            'Models' => $root . 'models/index.html',
-            'Banco' => $root . 'database/index.html',
-            'Diagrama' => $root . 'database/diagram.html',
+            $translator->t('nav.home') => $root . 'index.html',
+            $translator->t('nav.services') => $root . 'services/index.html',
+            $translator->t('nav.controllers') => $root . 'controllers/index.html',
+            $translator->t('nav.models') => $root . 'models/index.html',
+            $translator->t('nav.database') => $root . 'database/index.html',
+            $translator->t('nav.diagram') => $root . 'database/diagram.html',
         ];
         $links = '';
         foreach ($nav as $label => $href) {
             $links .= '<a class="rounded px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" href="' . Html::escape($href) . '">' . Html::escape($label) . '</a>';
         }
 
-        return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . Html::escape($title) . '</title><script src="https://cdn.tailwindcss.com"></script>' . self::tailwindConfig() . self::themeScript() . '<style>' . self::styles() . '</style></head><body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100"><nav class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"><div class="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-3 md:flex-row md:items-center md:justify-between"><a class="text-sm font-semibold text-slate-950 dark:text-slate-50" href="' . Html::escape($root . 'index.html') . '">Flow Docs</a><div class="flex flex-wrap items-center gap-1">' . $links . self::themeToggle() . '</div></div></nav>';
+        return '<!doctype html><html lang="' . Html::escape($translator->htmlLang()) . '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . Html::escape($title) . '</title><script src="https://cdn.tailwindcss.com"></script>' . self::tailwindConfig() . self::themeScript($translator) . '<style>' . self::styles() . '</style></head><body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100"><nav class="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"><div class="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-3 md:flex-row md:items-center md:justify-between"><a class="text-sm font-semibold text-slate-950 dark:text-slate-50" href="' . Html::escape($root . 'index.html') . '">Flow Docs</a><div class="flex flex-wrap items-center gap-1">' . $links . self::themeToggle($translator) . '</div></div></nav>';
     }
 
-    public static function metricCards(array $cards): string
+    public static function metricCards(array $cards, array $config = []): string
     {
         $html = '<section class="mt-6 grid gap-4 md:grid-cols-4">';
         foreach ($cards as $label => $value) {
@@ -45,11 +48,16 @@ window.tailwind.config = { darkMode: 'class' };
 HTML;
     }
 
-    private static function themeScript(): string
+    private static function themeScript(Translator $translator): string
     {
-        return <<<'HTML'
+        $useLight = json_encode($translator->t('theme.use_light'), JSON_THROW_ON_ERROR);
+        $useDark = json_encode($translator->t('theme.use_dark'), JSON_THROW_ON_ERROR);
+
+        return <<<HTML
 <script>
 (() => {
+  const useLightTitle = {$useLight};
+  const useDarkTitle = {$useDark};
   const key = 'flow-docs-theme';
   const root = document.documentElement;
   const prefersDark = () => window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -80,7 +88,7 @@ HTML;
     const sync = () => {
       const isDark = currentTheme() === 'dark';
       button.setAttribute('aria-pressed', isDark ? 'true' : 'false');
-      button.setAttribute('title', isDark ? 'Usar tema claro' : 'Usar tema escuro');
+      button.setAttribute('title', isDark ? useLightTitle : useDarkTitle);
     };
     button.addEventListener('click', () => {
       const nextTheme = currentTheme() === 'dark' ? 'light' : 'dark';
@@ -95,9 +103,9 @@ HTML;
 HTML;
     }
 
-    private static function themeToggle(): string
+    private static function themeToggle(Translator $translator): string
     {
-        return '<button id="flowDocsThemeToggle" class="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800" type="button" aria-label="Alternar tema" aria-pressed="false"><span class="dark:hidden">Escuro</span><span class="hidden dark:inline">Claro</span></button>';
+        return '<button id="flowDocsThemeToggle" class="inline-flex items-center rounded border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800" type="button" aria-label="' . Html::escape($translator->t('theme.toggle')) . '" aria-pressed="false"><span class="dark:hidden">' . Html::escape($translator->t('theme.dark')) . '</span><span class="hidden dark:inline">' . Html::escape($translator->t('theme.light')) . '</span></button>';
     }
 
     private static function styles(): string

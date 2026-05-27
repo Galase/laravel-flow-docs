@@ -11,6 +11,9 @@ return [
 
     'project_name' => config('app.name', 'Laravel'),
 
+    // Supported now: pt_BR, en, es. Add new files in Support/I18n/Languages to extend.
+    'language' => 'en',
+
     'back_link' => null,
 
     'controller_namespaces' => [

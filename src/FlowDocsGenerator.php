@@ -29,7 +29,7 @@ class FlowDocsGenerator
         $controllers = array_filter($classes, fn (array $class) => CodeAnalyzer::isControllerClass($class, $config));
         $models = array_filter($classes, fn (array $class) => CodeAnalyzer::isModelClass($class, $config));
         $migrations = MigrationAnalyzer::analyze($config);
-        $joins = CodeAnalyzer::inferJoins($classes);
+        $joins = CodeAnalyzer::inferJoins($classes, $config);
         $routes = $withRoutes ? $this->routesByAction() : [];
         $docTools = $this->docTools();
 
@@ -71,13 +71,13 @@ class FlowDocsGenerator
             'tableFileName' => fn (string $table): string => $this->tableFileName($table),
             'modelTableName' => fn (array $model): string => CodeAnalyzer::modelTableName($model),
             'modelRelations' => fn (array $model, array $config): array => CodeAnalyzer::modelRelations($model, $config),
-            'dependencyInjections' => fn (array $class): array => CodeAnalyzer::dependencyInjections($class),
-            'inferVariableModels' => fn (array $method, array $class, array $returnIndex): array => CodeAnalyzer::inferVariableModels($method, $class, $returnIndex),
+            'dependencyInjections' => fn (array $class, array $config = []): array => CodeAnalyzer::dependencyInjections($class, $config),
+            'inferVariableModels' => fn (array $method, array $class, array $returnIndex, array $config = []): array => CodeAnalyzer::inferVariableModels($method, $class, $returnIndex, $config),
             'detectModels' => fn (array $method, array $class, array $returnIndex, array $config): array => CodeAnalyzer::detectModels($method, $class, $returnIndex, $config),
             'detectActions' => fn (string $body, array $config): array => CodeAnalyzer::detectActions($body, $config),
-            'detectCalls' => fn (string $body): array => CodeAnalyzer::detectCalls($body),
+            'detectCalls' => fn (string $body, array $config = []): array => CodeAnalyzer::detectCalls($body, $config),
             'explicitPurpose' => fn (array $method, array $models, array $inferred, array $config): string => CodeAnalyzer::explicitPurpose($method, $models, $inferred, $config),
-            'lineExplanations' => fn (array $method, array $inferred): array => CodeAnalyzer::lineExplanations($method, $inferred),
+            'lineExplanations' => fn (array $method, array $inferred, array $config = []): array => CodeAnalyzer::lineExplanations($method, $inferred, $config),
         ];
     }
 
