@@ -270,9 +270,10 @@ final class CodeAnalyzer
     public static function lineExplanations(array $method, array $inferredVars): array
     {
         $rows = [];
-        foreach (explode("\n", $method['body']) as $index => $line) {
+        $lines = explode("\n", $method['body']);
+        foreach ($lines as $index => $line) {
             $trim = trim($line);
-            $explanation = self::explainLine($trim, $inferredVars);
+            $explanation = self::explainLine(self::analysisLine($lines, $index), $inferredVars);
             if (! $explanation) {
                 continue;
             }
@@ -388,30 +389,627 @@ final class CodeAnalyzer
         if ($line === '' || $line === '{' || $line === '}') {
             return null;
         }
-        foreach ($inferredVars as $var => $meta) {
-            if (preg_match('/\$' . preg_quote($var, '/') . '\b/', $line)) {
-                return 'Usa $' . $var . ' como ' . $meta['model'] . ', inferido por ' . $meta['source'] . '.';
+        if (strpos($line, '//') === 0) {
+            return 'Comentario de apoio do proprio codigo.';
+        }
+
+        $line = self::trimStatement($line);
+
+        if ($explanation = self::explainArrayEntry($line, $inferredVars)) {
+            return $explanation;
+        }
+        if (preg_match('/^return\s+(.+)$/s', $line, $match)) {
+            return self::explainReturnExpression($match[1], $inferredVars);
+        }
+        if (preg_match('/^\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/s', $line, $match)) {
+            return self::explainAssignment($match[1], $match[2], $inferredVars);
+        }
+        if ($explanation = self::explainStandaloneExpression($line, $inferredVars)) {
+            return $explanation;
+        }
+        if (preg_match('/^if\s*\((.+)\)$/s', $line, $match)) {
+            return 'Avalia se ' . self::describeCondition($match[1]) . ' para decidir o proximo caminho do fluxo.';
+        }
+        if (preg_match('/^elseif\s*\((.+)\)$/s', $line, $match)) {
+            return 'Avalia a condicao alternativa em que ' . self::describeCondition($match[1]) . '.';
+        }
+        if (preg_match('/^else\b/', $line)) {
+            return 'Executa o caminho alternativo quando as condicoes anteriores nao forem atendidas.';
+        }
+        if (preg_match('/^foreach\s*\((.+)\s+as\s+(.+)\)$/s', $line, $match)) {
+            return 'Percorre ' . self::describeValue($match[1], $inferredVars) . ' e disponibiliza cada item como ' . trim($match[2]) . '.';
+        }
+        if (preg_match('/^(for|while)\s*\(/', $line)) {
+            return 'Inicia uma repeticao controlada pela condicao informada.';
+        }
+        if (preg_match('/^try\b/', $line)) {
+            return 'Inicia um bloco protegido para capturar falhas desta etapa.';
+        }
+        if (preg_match('/^catch\s*\(([^)]+)\)/', $line, $match)) {
+            return 'Captura e trata a excecao ' . trim($match[1]) . ' gerada no bloco anterior.';
+        }
+
+        return null;
+    }
+
+    private static function analysisLine(array $lines, int $index): string
+    {
+        $line = trim($lines[$index] ?? '');
+        if (! self::shouldCollectStatement($line)) {
+            return $line;
+        }
+
+        $statement = $line;
+        for ($i = $index + 1, $count = count($lines); $i < $count; $i++) {
+            $next = trim($lines[$i]);
+            if ($next === '') {
+                continue;
+            }
+            $statement .= ' ' . $next;
+            if (self::statementLooksComplete($next)) {
+                break;
             }
         }
-        if (strpos($line, '//') === 0) return 'Comentario de apoio do proprio codigo.';
-        if (preg_match('/^\$[A-Za-z0-9_]+\s*=\s*new\s+([A-Za-z0-9_\\\\]+)/', $line, $match)) return 'Instancia ' . $match[1] . ' para delegar parte da regra.';
-        if (preg_match('/^\$[A-Za-z0-9_]+\s*=\s*\$this->([A-Za-z_][A-Za-z0-9_]*)\s*\(/', $line, $match)) return 'Recebe o retorno do metodo interno ' . $match[1] . '() e segue o fluxo com essa variavel.';
-        if (preg_match('/^\$[A-Za-z0-9_]+\s*=/', $line)) return 'Monta uma variavel intermediaria usada nas proximas etapas do fluxo.';
-        if (preg_match('/return\s+response\(\)->json/', $line)) return 'Devolve resposta JSON para consumo de tela ou API.';
-        if (preg_match('/^return\b/', $line)) return 'Encerra o metodo devolvendo o resultado calculado.';
-        if (preg_match('/->where\(|::where\(/', $line)) return 'Aplica filtro na consulta.';
-        if (preg_match('/->join\(|::join\(/', $line)) return 'Relaciona tabelas para compor a consulta.';
-        if (preg_match('/->select\(|::select\(/', $line)) return 'Define os campos retornados pela consulta.';
-        if (preg_match('/->get\(|->first\(|->paginate\(|->pluck\(/', $line)) return 'Executa a consulta e materializa o resultado.';
-        if (preg_match('/create\(|save\(|update\(|insert\(|delete\(|destroy\(/', $line)) return 'Persiste alteracao no banco de dados.';
-        if (preg_match('/if\s*\(/', $line)) return 'Abre uma regra condicional para decidir o proximo passo.';
-        if (preg_match('/else\b/', $line)) return 'Define o caminho alternativo da regra anterior.';
-        if (preg_match('/foreach\s*\(|for\s*\(|while\s*\(/', $line)) return 'Percorre uma colecao ou intervalo de dados.';
-        if (preg_match('/try\s*\{/', $line)) return 'Inicia bloco protegido contra falhas.';
-        if (preg_match('/catch\s*\(/', $line)) return 'Trata excecao gerada no fluxo.';
-        if (preg_match('/payload|Payload|\[[^\]]*=>/', $line)) return 'Monta parte do payload ou estrutura que sera enviada/adaptada pelo fluxo.';
 
-        return 'Executa uma etapa operacional do fluxo.';
+        return $statement;
+    }
+
+    private static function shouldCollectStatement(string $line): bool
+    {
+        if ($line === '' || self::statementLooksComplete($line) || str_ends_with($line, '[')) {
+            return false;
+        }
+
+        return preg_match('/^(return\b|\$[A-Za-z_][A-Za-z0-9_]*\s*=|[A-Z][A-Za-z0-9_\\\\]*::|DB::table\()/', $line) === 1;
+    }
+
+    private static function statementLooksComplete(string $line): bool
+    {
+        return str_ends_with(rtrim($line), ';');
+    }
+
+    private static function explainArrayEntry(string $line, array $inferredVars): ?string
+    {
+        if (! preg_match('/^[\'"]([^\'"]+)[\'"]\s*=>\s*(.+)$/s', $line, $match)) {
+            return null;
+        }
+
+        $key = $match[1];
+        $value = self::trimStatement($match[2]);
+
+        return 'Preenche o campo ' . $key . ' com ' . self::describeValue($value, $inferredVars) . '.';
+    }
+
+    private static function explainReturnExpression(string $expression, array $inferredVars): string
+    {
+        $expression = self::trimStatement($expression);
+        if (preg_match('/^response\(\)->json\((.*)\)$/s', $expression, $match)) {
+            return 'Devolve uma resposta JSON usando ' . self::describeValue($match[1], $inferredVars) . '.';
+        }
+        if (preg_match('/^view\((.*)\)$/s', $expression, $match)) {
+            $args = TextAnalyzer::splitArguments($match[1]);
+            $view = isset($args[0]) ? self::cleanArgument($args[0]) : 'a view informada';
+
+            return 'Renderiza a view ' . $view . (isset($args[1]) ? ' com ' . self::describeValue($args[1], $inferredVars) : '') . '.';
+        }
+
+        return 'Retorna ' . self::describeValue($expression, $inferredVars) . ' para quem chamou o metodo.';
+    }
+
+    private static function explainAssignment(string $var, string $expression, array $inferredVars): string
+    {
+        $expression = self::trimStatement($expression);
+        $description = 'Atribui a $' . $var . ' ' . self::describeValue($expression, $inferredVars) . '.';
+
+        return self::appendInferredModel($description, $var, $inferredVars);
+    }
+
+    private static function explainStandaloneExpression(string $line, array $inferredVars): ?string
+    {
+        if ($explanation = self::explainStandaloneFluentChain($line)) {
+            return $explanation;
+        }
+        if (preg_match('/^(?:\$this->[A-Za-z_][A-Za-z0-9_]*->|\$this->|self::|[A-Z][A-Za-z0-9_\\\\]*::)/', $line)) {
+            return 'Executa ' . self::describeValue($line, $inferredVars) . '.';
+        }
+
+        return null;
+    }
+
+    private static function explainStandaloneFluentChain(string $line): ?string
+    {
+        if (! preg_match('/^(\$[A-Za-z_][A-Za-z0-9_]*)(->.+)$/s', $line, $match)) {
+            return null;
+        }
+        if ($match[1] === '$this') {
+            return null;
+        }
+
+        $filters = [];
+        $steps = [];
+        preg_match_all('/->([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)/s', $match[2], $calls, PREG_SET_ORDER);
+        foreach ($calls as $call) {
+            if ($filter = self::queryFilterDescription($call[1], TextAnalyzer::splitArguments($call[2]))) {
+                $filters[] = $filter;
+                continue;
+            }
+            $step = self::fluentOperationDescription($call[1], TextAnalyzer::splitArguments($call[2]));
+            if ($step !== null) {
+                $steps[] = $step;
+            }
+        }
+        if ($filters && $steps === []) {
+            return 'Aplica em ' . $match[1] . ' filtro em que ' . self::joinReadableParts($filters) . '.';
+        }
+        if ($filters) {
+            array_unshift($steps, 'filtro em que ' . self::joinReadableParts($filters));
+        }
+
+        return $steps ? 'Atualiza ' . $match[1] . ' com ' . self::joinReadableParts($steps) . '.' : null;
+    }
+
+    private static function describeValue(string $expression, array $inferredVars): string
+    {
+        $expression = self::trimStatement($expression);
+        if ($expression === '') {
+            return 'o valor calculado nesta etapa';
+        }
+        if ($expression === '[') {
+            return 'um array montado nas linhas seguintes';
+        }
+        if ($expression === '[]') {
+            return 'um array vazio';
+        }
+        if ($query = self::describeQueryExpression($expression)) {
+            return $query;
+        }
+        if ($chain = self::describeFluentChainExpression($expression)) {
+            return $chain;
+        }
+        if (preg_match('/^\$this->([A-Za-z_][A-Za-z0-9_]*)->([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/s', $expression, $match)) {
+            return 'o retorno de $this->' . $match[1] . '->' . self::callSignature($match[2], $match[3]) . ', acessando a propriedade ' . $match[1] . ' da instancia atual';
+        }
+        if (preg_match('/^\$this->([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/s', $expression, $match)) {
+            return 'o retorno de $this->' . self::callSignature($match[1], $match[2]) . ', executado na instancia atual';
+        }
+        if (preg_match('/^self::([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/s', $expression, $match)) {
+            return 'o retorno de self::' . self::callSignature($match[1], $match[2]) . ', executado no proprio service/classe';
+        }
+        if (preg_match('/^([A-Z][A-Za-z0-9_\\\\]*)::([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/s', $expression, $match)) {
+            return 'o retorno de ' . TextAnalyzer::baseName($match[1]) . '::' . self::callSignature($match[2], $match[3]);
+        }
+        if (preg_match('/^new\s+([A-Za-z_][A-Za-z0-9_\\\\]*)\s*\((.*)\)$/s', $expression, $match)) {
+            return 'uma nova instancia de ' . TextAnalyzer::baseName($match[1]) . self::argumentsSuffix($match[2]);
+        }
+        if (preg_match('/^\[([^\]]*)\]$/s', $expression, $match)) {
+            $keys = self::arrayKeys($match[1]);
+
+            return $keys ? 'um array com os campos ' . implode(', ', array_slice($keys, 0, 8)) : 'um array montado nesta linha';
+        }
+        if (preg_match('/^compact\((.*)\)$/s', $expression, $match)) {
+            $keys = array_map(fn (string $arg) => trim(self::cleanArgument($arg), '$'), TextAnalyzer::splitArguments($match[1]));
+
+            return 'um array criado por compact() com ' . implode(', ', array_filter($keys));
+        }
+        if (preg_match('/^\$([A-Za-z_][A-Za-z0-9_]*)$/', $expression, $match)) {
+            $var = $match[1];
+            if (isset($inferredVars[$var])) {
+                return 'o valor de $' . $var . ', tratado como ' . $inferredVars[$var]['model'] . ' pelas inferencias';
+            }
+
+            return 'o valor ja calculado em $' . $var;
+        }
+        if (preg_match('/^(true|false|null)$/i', $expression)) {
+            return 'o valor fixo ' . strtolower($expression);
+        }
+        if (preg_match('/^[\'"].*[\'"]$/s', $expression)) {
+            return 'o texto fixo ' . self::cleanArgument($expression);
+        }
+        if (is_numeric($expression)) {
+            return 'o numero fixo ' . $expression;
+        }
+
+        return 'o resultado de ' . $expression;
+    }
+
+    private static function describeQueryExpression(string $expression): ?string
+    {
+        $expression = self::trimStatement($expression);
+        if (preg_match('/^(?:\\\\?[A-Za-z_][A-Za-z0-9_]*\\\\(?:[A-Za-z_][A-Za-z0-9_]*\\\\)*)?([A-Z][A-Za-z0-9_]+)::([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)(.*)$/s', $expression, $match)) {
+            if (! self::isQueryMethod($match[2])) {
+                return null;
+            }
+
+            $operations = self::queryOperations($match[2], $match[3], $match[4]);
+
+            return 'o resultado de uma query em ' . $match[1] . ' que ' . self::describeQueryOperations($operations);
+        }
+        if (preg_match('/^DB::table\((.*?)\)(.*)$/s', $expression, $match)) {
+            $operations = self::queryOperations('table', $match[1], $match[2]);
+
+            return 'o resultado de uma query na tabela ' . self::cleanArgument($match[1]) . ' que ' . self::describeQueryOperations($operations);
+        }
+
+        return null;
+    }
+
+    private static function describeFluentChainExpression(string $expression): ?string
+    {
+        if (! preg_match('/^(\$[A-Za-z_][A-Za-z0-9_]*)(->.+)$/s', $expression, $match)) {
+            return null;
+        }
+        if ($match[1] === '$this') {
+            return null;
+        }
+
+        $filters = [];
+        $steps = [];
+        preg_match_all('/->([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)/s', $match[2], $calls, PREG_SET_ORDER);
+        foreach ($calls as $call) {
+            if ($filter = self::queryFilterDescription($call[1], TextAnalyzer::splitArguments($call[2]))) {
+                $filters[] = $filter;
+                continue;
+            }
+            $step = self::fluentOperationDescription($call[1], TextAnalyzer::splitArguments($call[2]));
+            if ($step !== null) {
+                $steps[] = $step;
+            }
+        }
+        if ($filters) {
+            array_unshift($steps, 'filtrado em que ' . self::joinReadableParts($filters));
+        }
+
+        return $steps ? $match[1] . ' ' . self::joinReadableParts($steps) : null;
+    }
+
+    private static function fluentOperationDescription(string $method, array $args): ?string
+    {
+        if ($method === 'orderBy' && isset($args[0])) {
+            return 'ordenado por ' . self::cleanArgument($args[0]) . (isset($args[1]) ? ' ' . self::cleanArgument($args[1]) : '');
+        }
+        if ($method === 'latest') {
+            return 'ordenado do mais recente' . (isset($args[0]) ? ' por ' . self::cleanArgument($args[0]) : '');
+        }
+        if ($method === 'oldest') {
+            return 'ordenado do mais antigo' . (isset($args[0]) ? ' por ' . self::cleanArgument($args[0]) : '');
+        }
+        if ($method === 'paginate') {
+            return 'paginado' . (isset($args[0]) ? ' por ' . self::cleanArgument($args[0]) : '');
+        }
+        if ($method === 'simplePaginate') {
+            return 'paginado de forma simples' . (isset($args[0]) ? ' por ' . self::cleanArgument($args[0]) : '');
+        }
+        if ($method === 'withQueryString') {
+            return 'com query string';
+        }
+        if ($method === 'appends' && isset($args[0])) {
+            return 'com parametros de query adicionais de ' . self::cleanArgument($args[0]);
+        }
+        if ($method === 'select' && $args) {
+            return 'selecionando ' . implode(', ', array_map(fn (string $arg) => self::cleanArgument($arg), array_slice($args, 0, 6)));
+        }
+        if ($method === 'with' && $args) {
+            return 'com relacoes ' . implode(', ', array_map(fn (string $arg) => self::cleanArgument($arg), array_slice($args, 0, 6)));
+        }
+        if ($method === 'get') {
+            return 'materializado como colecao';
+        }
+        if ($method === 'first') {
+            return 'limitado ao primeiro resultado';
+        }
+        if ($method === 'count') {
+            return 'contando o total';
+        }
+        if ($method === 'pluck' && isset($args[0])) {
+            return 'extraindo ' . self::cleanArgument($args[0]);
+        }
+
+        return null;
+    }
+
+    private static function queryOperations(string $firstMethod, string $firstArgs, string $tail): array
+    {
+        $operations = [['method' => $firstMethod, 'args' => TextAnalyzer::splitArguments($firstArgs)]];
+        preg_match_all('/->([A-Za-z_][A-Za-z0-9_]*)\s*\((.*?)\)/s', $tail, $matches, PREG_SET_ORDER);
+        foreach ($matches as $match) {
+            $operations[] = ['method' => $match[1], 'args' => TextAnalyzer::splitArguments($match[2])];
+        }
+
+        return $operations;
+    }
+
+    private static function describeQueryOperations(array $operations): string
+    {
+        $filters = [];
+        $joins = [];
+        $selects = [];
+        $relations = [];
+        $ordering = [];
+
+        foreach ($operations as $operation) {
+            $method = $operation['method'];
+            $args = $operation['args'];
+            if ($filter = self::queryFilterDescription($method, $args)) {
+                $filters[] = $filter;
+            }
+            if (in_array($method, ['join', 'leftJoin', 'rightJoin'], true) && isset($args[0])) {
+                $joins[] = self::cleanArgument($args[0]);
+            }
+            if ($method === 'select' && $args) {
+                $selects[] = implode(', ', array_map(fn (string $arg) => self::cleanArgument($arg), array_slice($args, 0, 6)));
+            }
+            if ($method === 'with' && $args) {
+                $relations[] = implode(', ', array_map(fn (string $arg) => self::cleanArgument($arg), array_slice($args, 0, 6)));
+            }
+            if ($method === 'orderBy' && isset($args[0])) {
+                $ordering[] = self::cleanArgument($args[0]) . (isset($args[1]) ? ' ' . self::cleanArgument($args[1]) : '');
+            }
+        }
+
+        $parts = [];
+        if ($filters) {
+            $parts[] = 'filtra registros em que ' . implode(' e ', array_slice($filters, 0, 4));
+        }
+        if ($joins) {
+            $parts[] = 'relaciona com ' . implode(', ', array_slice($joins, 0, 4));
+        }
+        if ($selects) {
+            $parts[] = 'seleciona ' . implode(', ', $selects);
+        }
+        if ($relations) {
+            $parts[] = 'carrega as relacoes ' . implode(', ', $relations);
+        }
+        if ($ordering) {
+            $parts[] = 'ordena por ' . implode(', ', $ordering);
+        }
+
+        $result = self::queryResultDescription($operations);
+        if ($parts === []) {
+            return $result;
+        }
+
+        return implode(', ', $parts) . ' e ' . $result;
+    }
+
+    private static function queryFilterDescription(string $method, array $args): ?string
+    {
+        if (in_array($method, ['where', 'orWhere'], true) && count($args) >= 2) {
+            $field = self::cleanArgument($args[0]);
+            if (count($args) === 2) {
+                return $field . ' seja ' . self::cleanArgument($args[1]);
+            }
+
+            return $field . ' ' . self::describeOperator(self::cleanArgument($args[1]), self::cleanArgument($args[2]));
+        }
+        if (in_array($method, ['whereIn', 'whereNotIn'], true) && count($args) >= 2) {
+            return self::cleanArgument($args[0]) . ($method === 'whereIn' ? ' esteja em ' : ' nao esteja em ') . self::cleanArgument($args[1]);
+        }
+        if (in_array($method, ['whereBetween', 'whereNotBetween'], true) && count($args) >= 2) {
+            return self::cleanArgument($args[0]) . ($method === 'whereBetween' ? ' esteja entre ' : ' nao esteja entre ') . self::cleanArgument($args[1]);
+        }
+        if (in_array($method, ['whereNull', 'whereNotNull'], true) && isset($args[0])) {
+            return self::cleanArgument($args[0]) . ($method === 'whereNull' ? ' seja nulo' : ' nao seja nulo');
+        }
+        if ($method === 'whereColumn' && count($args) >= 2) {
+            if (count($args) === 2) {
+                return self::cleanArgument($args[0]) . ' seja igual a coluna ' . self::cleanArgument($args[1]);
+            }
+
+            return self::cleanArgument($args[0]) . ' ' . self::describeOperator(self::cleanArgument($args[1]), 'coluna ' . self::cleanArgument($args[2]));
+        }
+        if ($method === 'whereDate' && count($args) >= 2) {
+            return 'a data ' . self::cleanArgument($args[0]) . ' seja ' . self::cleanArgument(end($args) ?: '');
+        }
+        if (in_array($method, ['whereYear', 'whereMonth', 'whereDay', 'whereTime'], true) && count($args) >= 2) {
+            $unit = match ($method) {
+                'whereYear' => 'ano',
+                'whereMonth' => 'mes',
+                'whereDay' => 'dia',
+                default => 'horario',
+            };
+
+            return $unit . ' de ' . self::cleanArgument($args[0]) . ' seja ' . self::cleanArgument(end($args) ?: '');
+        }
+        if ($method === 'whereJsonContains' && count($args) >= 2) {
+            return self::cleanArgument($args[0]) . ' contenha ' . self::cleanArgument($args[1]);
+        }
+        if (in_array($method, ['whereHas', 'orWhereHas'], true) && isset($args[0])) {
+            return 'a relacao ' . self::cleanArgument($args[0]) . ' exista e atenda ao filtro informado';
+        }
+        if (in_array($method, ['whereDoesntHave', 'orWhereDoesntHave', 'doesntHave'], true) && isset($args[0])) {
+            return 'a relacao ' . self::cleanArgument($args[0]) . ' nao exista';
+        }
+        if ($method === 'has' && isset($args[0])) {
+            return 'a relacao ' . self::cleanArgument($args[0]) . ' exista';
+        }
+        if ($method === 'whereRelation' && count($args) >= 3) {
+            return 'a relacao ' . self::cleanArgument($args[0]) . ' tenha ' . self::cleanArgument($args[1]) . ' ' . self::describeOperator(self::cleanArgument($args[2]), self::cleanArgument($args[3] ?? ''));
+        }
+        if ($method === 'find' || $method === 'findOrFail') {
+            return 'id seja ' . self::cleanArgument($args[0] ?? '');
+        }
+
+        return null;
+    }
+
+    private static function describeOperator(string $operator, string $value): string
+    {
+        return match (strtolower($operator)) {
+            '=', '==' => 'seja ' . $value,
+            '!=', '<>' => 'seja diferente de ' . $value,
+            '>' => 'seja maior que ' . $value,
+            '>=' => 'seja maior ou igual a ' . $value,
+            '<' => 'seja menor que ' . $value,
+            '<=' => 'seja menor ou igual a ' . $value,
+            'like', 'ilike' => 'corresponda a ' . $value,
+            'not like', 'not ilike' => 'nao corresponda a ' . $value,
+            default => $operator . ' ' . $value,
+        };
+    }
+
+    private static function queryResultDescription(array $operations): string
+    {
+        $methods = array_map(fn (array $operation) => $operation['method'], $operations);
+        if (in_array('count', $methods, true)) {
+            return 'conta o total encontrado';
+        }
+        if (in_array('exists', $methods, true)) {
+            return 'verifica se existe algum registro encontrado';
+        }
+        if (in_array('first', $methods, true) || in_array('find', $methods, true) || in_array('findOrFail', $methods, true)) {
+            return 'retorna um unico registro encontrado';
+        }
+        if (in_array('paginate', $methods, true)) {
+            return 'retorna resultados paginados';
+        }
+        if (in_array('pluck', $methods, true)) {
+            return 'extrai uma lista de valores';
+        }
+        if (in_array('sum', $methods, true) || in_array('avg', $methods, true) || in_array('min', $methods, true) || in_array('max', $methods, true)) {
+            return 'calcula um valor agregado';
+        }
+        if (in_array('create', $methods, true) || in_array('insert', $methods, true)) {
+            return 'cria registros no banco';
+        }
+        if (in_array('update', $methods, true)) {
+            return 'atualiza os registros encontrados';
+        }
+        if (in_array('delete', $methods, true) || in_array('destroy', $methods, true)) {
+            return 'remove os registros encontrados';
+        }
+        if (in_array('get', $methods, true)) {
+            return 'retorna a colecao encontrada';
+        }
+
+        return 'monta a consulta para uso posterior';
+    }
+
+    private static function joinReadableParts(array $parts): string
+    {
+        $parts = array_values(array_filter($parts));
+        if (count($parts) <= 1) {
+            return $parts[0] ?? '';
+        }
+
+        return implode(', ', array_slice($parts, 0, -1)) . ' e ' . end($parts);
+    }
+
+    private static function describeCondition(string $condition): string
+    {
+        $condition = trim($condition);
+        $replacements = [
+            '===' => 'seja exatamente',
+            '!==' => 'seja diferente de',
+            '==' => 'seja igual a',
+            '!=' => 'seja diferente de',
+            '>=' => 'seja maior ou igual a',
+            '<=' => 'seja menor ou igual a',
+            '&&' => 'e',
+            '||' => 'ou',
+            '!' => 'nao',
+        ];
+
+        return trim(str_replace(array_keys($replacements), array_values($replacements), $condition));
+    }
+
+    private static function appendInferredModel(string $description, string $var, array $inferredVars): string
+    {
+        if (! isset($inferredVars[$var])) {
+            return $description;
+        }
+
+        return rtrim($description, '.') . '; o valor e tratado como ' . $inferredVars[$var]['model'] . ' pelas inferencias.';
+    }
+
+    private static function arrayKeys(string $items): array
+    {
+        $keys = [];
+        foreach (TextAnalyzer::splitArguments($items) as $item) {
+            if (preg_match('/^[\'"]([^\'"]+)[\'"]\s*=>/', $item, $match)) {
+                $keys[] = $match[1];
+            }
+        }
+
+        return $keys;
+    }
+
+    private static function callSignature(string $method, string $args): string
+    {
+        $arguments = array_map(fn (string $arg) => self::cleanArgument($arg), TextAnalyzer::splitArguments($args));
+
+        return $method . '(' . implode(', ', array_slice($arguments, 0, 4)) . ')';
+    }
+
+    private static function argumentsSuffix(string $args): string
+    {
+        $arguments = TextAnalyzer::splitArguments($args);
+
+        return $arguments ? ' com ' . implode(', ', array_map(fn (string $arg) => self::cleanArgument($arg), array_slice($arguments, 0, 4))) : '';
+    }
+
+    private static function cleanArgument(string $argument): string
+    {
+        $argument = self::trimStatement($argument);
+        $argument = trim($argument, " \t\n\r\0\x0B");
+        if (preg_match('/^[\'"](.*)[\'"]$/s', $argument, $match)) {
+            return $match[1];
+        }
+        if (preg_match('/^([A-Za-z_][A-Za-z0-9_\\\\]+)::class$/', $argument, $match)) {
+            return TextAnalyzer::baseName($match[1]);
+        }
+        if (strlen($argument) > 80) {
+            return substr($argument, 0, 77) . '...';
+        }
+
+        return $argument;
+    }
+
+    private static function trimStatement(string $value): string
+    {
+        $value = trim($value);
+        while ($value !== '' && (str_ends_with($value, ';') || str_ends_with($value, ','))) {
+            $value = trim(substr($value, 0, -1));
+        }
+
+        return $value;
+    }
+
+    private static function isQueryMethod(string $method): bool
+    {
+        return in_array($method, [
+            'query',
+            'where',
+            'orWhere',
+            'whereIn',
+            'whereNotIn',
+            'whereNull',
+            'whereNotNull',
+            'whereDate',
+            'find',
+            'findOrFail',
+            'first',
+            'create',
+            'insert',
+            'update',
+            'delete',
+            'destroy',
+            'select',
+            'with',
+            'join',
+            'leftJoin',
+            'rightJoin',
+            'orderBy',
+            'groupBy',
+            'get',
+            'paginate',
+            'pluck',
+            'count',
+            'exists',
+            'sum',
+            'avg',
+            'min',
+            'max',
+        ], true);
     }
 
     private static function importAliases(array $imports): array

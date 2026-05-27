@@ -42,12 +42,37 @@ class Aluno
 }
 PHP);
 
+        File::put(app_path('Models/Category.php'), <<<'PHP'
+<?php
+
+namespace App\Models;
+
+class Category
+{
+    public static function where($field, $value)
+    {
+        return new static();
+    }
+
+    public function get()
+    {
+        return $this;
+    }
+
+    public function count()
+    {
+        return 1;
+    }
+}
+PHP);
+
         File::put(app_path('Services/AlunoService.php'), <<<'PHP'
 <?php
 
 namespace App\Services;
 
 use App\Models\Aluno;
+use App\Models\Category;
 
 class AlunoService
 {
@@ -66,6 +91,23 @@ class AlunoService
         $payload = ['aluno' => $aluno, 'gateway' => 'Lytex'];
 
         return $payload;
+    }
+
+    public function dashboard()
+    {
+        $count = Category::where('active', true)->get()->count();
+
+        return [
+            'news' => $this->newsService->getAllNews(),
+            'count' => $count,
+        ];
+    }
+
+    public function listarPaginado($query, $perPage)
+    {
+        $query->where('index', $filters['index']);
+
+        return $query->where('active', true)->where('name', 'like', $this->search)->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
     }
 }
 PHP);
@@ -156,6 +198,9 @@ PHP);
 
         $html = File::get(base_path('flow-docs-output/services/services/App__Services__AlunoService.html'));
 
+        $this->assertStringContainsString('id="flowDocsThemeToggle"', $html);
+        $this->assertStringContainsString("window.tailwind.config = { darkMode: 'class' }", $html);
+        $this->assertStringContainsString('flow-docs-theme', $html);
         $this->assertStringContainsString('Metodo montaPayloadLytex constroi o payload para o gateway Lytex', $html);
         $this->assertStringContainsString('Codigo anotado', $html);
         $this->assertStringContainsString('code-dracula', $html);
@@ -163,7 +208,11 @@ PHP);
         $this->assertStringContainsString('tok-comment', $html);
         $this->assertStringContainsString('language-php', $html);
         $this->assertStringNotContainsString('```php', $html);
-        $this->assertStringContainsString('Usa $aluno como Aluno', $html);
+        $this->assertStringContainsString('Atribui a $aluno o retorno de $this-&gt;buscaAluno($id), executado na instancia atual; o valor e tratado como Aluno pelas inferencias.', $html);
+        $this->assertStringContainsString('Atribui a $count o resultado de uma query em Category que filtra registros em que active seja true e conta o total encontrado; o valor e tratado como Category pelas inferencias.', $html);
+        $this->assertStringContainsString('Preenche o campo news com o retorno de $this-&gt;newsService-&gt;getAllNews(), acessando a propriedade newsService da instancia atual.', $html);
+        $this->assertStringContainsString('Aplica em $query filtro em que index seja $filters[&#039;index&#039;].', $html);
+        $this->assertStringContainsString('Retorna $query filtrado em que active seja true e name corresponda a $this-&gt;search, ordenado por id desc, paginado por $perPage e com query string para quem chamou o metodo.', $html);
         $this->assertStringContainsString('$aluno', $html);
         $this->assertStringContainsString('Aluno', $html);
     }
@@ -187,6 +236,12 @@ PHP);
         $controller = File::get(base_path('flow-docs-output/controllers/controllers/App__Modules__Matriculas__Controllers__MatriculaController.html'));
         $service = File::get(base_path('flow-docs-output/services/services/App__Modules__Matriculas__Services__MatriculaService.html'));
 
+        foreach ([$root, $model, $database, $diagram, $table, $controller, $service] as $generatedHtml) {
+            $this->assertStringContainsString('id="flowDocsThemeToggle"', $generatedHtml);
+            $this->assertStringContainsString("window.tailwind.config = { darkMode: 'class' }", $generatedHtml);
+            $this->assertStringContainsString('flow-docs-theme', $generatedHtml);
+        }
+
         $this->assertStringContainsString('Models', $root);
         $this->assertStringContainsString('Banco de dados', $root);
         $this->assertStringContainsString('Flow Docs', $root);
@@ -203,6 +258,8 @@ PHP);
         $this->assertStringContainsString('data-to="turmas"', $diagram);
         $this->assertStringContainsString('diagram-card-dimmed', $diagram);
         $this->assertStringContainsString('diagram-edge-active', $diagram);
+        $this->assertStringContainsString('html.dark .diagram-edge-label', $diagram);
+        $this->assertStringContainsString('stroke:#020617', $diagram);
         $this->assertStringContainsString('edge.dataset.from === table || edge.dataset.to === table', $diagram);
         $this->assertStringContainsString('event.button !== 2', $diagram);
         $this->assertStringContainsString("viewport.classList.add('cursor-grabbing')", $diagram);
